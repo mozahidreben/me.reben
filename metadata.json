@@ -1,0 +1,6 @@
+{
+  "name": "Reben Station Shift",
+  "description": "Mobile fuel station shift reporting, meter OCR scanning, cash reconciliation, and multi-language cute voice guide.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

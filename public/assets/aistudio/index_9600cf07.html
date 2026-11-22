@@ -1,0 +1,3175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <script>if (window.AndroidBridge) document.documentElement.classList.add('android-app');</script>
+    <title>Reben · mobile</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        :root {
+            --reben-red: #E30613;
+            --primary-bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --input-bg: #f1f5f9;
+            --input-border: #e2e8f0;
+            --footer-bg: rgba(255, 255, 255, 0.98);
+            --shift-indicator: #0f172a;
+            --91: #059669;
+            --95: #dc2626;
+            --d: #f59e0b;
+            --98: #7c3aed;
+            --k: #0ea5e9;
+            --wa: #25D366;
+            --error: #ef4444;
+            --error-bg: #fee2e2;
+            --error-text: #b91c1c;
+            --mic-active: #4CAF50;
+            --sync-pending: #f59e0b;
+            --sync-success: #10b981;
+        }
+
+        body.night-mode {
+            --primary-bg: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --input-bg: #334155;
+            --input-border: #475569;
+            --footer-bg: rgba(30, 41, 59, 0.98);
+            --shift-indicator: #fbbf24;
+            --error-bg: #451a1a;
+            --error-text: #fca5a5;
+            --mic-active: #4CAF50;
+        }
+
+        body {
+            background: var(--primary-bg);
+            padding: 0 8px 180px 8px;
+            min-height: 100vh;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button, input, select {
+            font-size: 16px;
+            touch-action: manipulation;
+        }
+
+        .frozen-header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: var(--primary-bg);
+            padding: 8px 0 4px 0;
+            margin-bottom: 8px;
+        }
+
+        .station-card {
+            background: var(--card-bg);
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            border: 1px solid var(--input-border);
+        }
+
+        .station-input {
+            width: 100%;
+            padding: 12px 12px;
+            border: none;
+            font-weight: 700;
+            font-size: 16px;
+            text-align: center;
+            letter-spacing: 0.5px;
+            color: var(--reben-red);
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--input-border);
+            outline: none;
+            text-transform: uppercase;
+        }
+
+        .price-row {
+            display: flex;
+            gap: 3px;
+            padding: 8px;
+        }
+
+        .price-item {
+            flex: 1;
+            background: var(--input-bg);
+            border-radius: 30px;
+            padding: 4px 2px;
+            text-align: center;
+            border: 1px solid var(--input-border);
+        }
+
+        .price-item label {
+            display: block;
+            font-size: 7px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            letter-spacing: 0.3px;
+        }
+
+        .price-item input {
+            width: 100%;
+            border: none;
+            background: transparent;
+            font-weight: 800;
+            font-size: 13px;
+            text-align: center;
+            color: var(--text-primary);
+            outline: none;
+            padding: 2px;
+        }
+
+        .invalid {
+            border: 2px solid var(--error) !important;
+            background: var(--error-bg) !important;
+            color: var(--error-text) !important;
+        }
+
+        .invalid::placeholder {
+            color: var(--error-text);
+            opacity: 0.7;
+        }
+
+        .price-apps-btn {
+            flex: 1;
+            background: #000;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            cursor: pointer;
+            height: auto;
+            min-height: 44px;
+            padding: 4px;
+            border: 1px solid #000;
+            transition: opacity 0.2s;
+        }
+
+        .price-apps-btn:active {
+            opacity: 0.7;
+        }
+
+        body.night-mode .price-apps-btn {
+            background: #1e293b;
+            color: white;
+            border-color: #475569;
+        }
+
+        .apps-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            margin-bottom: 8px;
+            padding: 10px;
+            border: 1px solid var(--input-border);
+            scroll-margin-top: 100px;
+            display: none;
+        }
+
+        .apps-card.visible {
+            display: block;
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .app-item {
+            background: var(--input-bg);
+            border-radius: 16px;
+            padding: 6px 4px;
+            border: 1px solid var(--input-border);
+        }
+
+        .app-item label {
+            display: block;
+            font-size: 7px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 2px;
+            text-align: center;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .app-item input {
+            width: 100%;
+            border: none;
+            background: transparent;
+            font-weight: 800;
+            font-size: 13px;
+            text-align: center;
+            color: var(--text-primary);
+            outline: none;
+        }
+
+        .cash-inside-apps {
+            background: var(--91);
+            border-radius: 30px;
+            padding: 10px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            margin-top: 12px;
+            width: 100%;
+            grid-column: span 2;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .cash-inside-apps span:first-child {
+            font-size: 11px;
+            font-weight: 600;
+            opacity: 0.9;
+            letter-spacing: 0.5px;
+        }
+
+        .cash-inside-apps span:last-child {
+            font-size: 26px;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .nozzle-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .nozzle-card {
+            background: var(--card-bg);
+            border-radius: 18px;
+            padding: 8px;
+            border-left: 6px solid;
+            border: 1px solid var(--input-border);
+            border-left-width: 6px;
+        }
+
+        .card-91 { border-left-color: var(--91); }
+        .card-95 { border-left-color: var(--95); }
+        .card-d { border-left-color: var(--d); }
+        .card-98 { border-left-color: var(--98); }
+        .card-k { border-left-color: var(--k); }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            gap: 4px;
+        }
+
+        .nozzle-name {
+            border: none;
+            background: var(--input-bg);
+            font-weight: 700;
+            font-size: 12px;
+            color: var(--text-primary);
+            width: 100px;
+            padding: 4px 8px;
+            border-radius: 20px;
+            outline: none;
+            border: 1px solid var(--input-border);
+        }
+
+        .fuel-badge {
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 20px;
+            padding: 4px 8px;
+            font-weight: 600;
+            font-size: 10px;
+            color: var(--text-primary);
+            outline: none;
+        }
+
+        .delete-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 14px;
+            width: 30px;
+            height: 30px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .delete-btn:active {
+            background: var(--input-bg);
+        }
+
+        /* Lock icon for the INITIAL (opening) reading */
+        .lock-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 14px;
+            width: 30px;
+            height: 30px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .lock-btn:active { background: var(--input-bg); }
+        .lock-btn.unlocked { color: #d97706; background: rgba(217, 119, 6, 0.14); }
+        .reading-field.is-locked {
+            background: transparent;
+            border-style: dashed;
+            color: var(--text-secondary);
+        }
+        .cam-btn:disabled, .mic-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        /* Small message bubble (report log status, lock hints) */
+        .app-toast {
+            position: fixed;
+            left: 50%;
+            bottom: 90px;
+            transform: translateX(-50%) translateY(10px);
+            max-width: calc(100% - 24px);
+            background: #1e293b;
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.3;
+            text-align: center;
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        }
+        .app-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .app-toast.ok { background: #059669; }
+        .app-toast.warn { background: #d97706; }
+
+        .reading-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .reading-row {
+            width: 100%;
+            position: relative;
+        }
+
+        .reading-row label {
+            display: block;
+            font-size: 8px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 2px;
+            padding-left: 4px;
+        }
+
+        .reading-field {
+            width: 100%;
+            padding: 8px 70px 8px 10px;
+            border: 1.5px solid var(--input-border);
+            border-radius: 18px;
+            font-weight: 800;
+            font-size: 16px;
+            background: var(--input-bg);
+            color: var(--text-primary);
+            outline: none;
+        }
+
+        .action-buttons {
+            position: absolute;
+            bottom: 4px;
+            right: 4px;
+            display: flex;
+            gap: 4px;
+        }
+
+        .cam-btn, .mic-btn {
+            background: #334155;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            width: 32px;
+            height: 32px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mic-btn {
+            background: #4b5563;
+        }
+
+        .mic-btn.listening {
+            background: var(--mic-active);
+            animation: pulse 1.5s infinite;
+        }
+
+        .cam-btn:active, .mic-btn:active {
+            opacity: 0.7;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+            }
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+            }
+        }
+
+        .diff-badge {
+            text-align: right;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            background: var(--input-bg);
+            padding: 4px 10px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-left: auto;
+        }
+
+        .diff-error {
+            color: var(--error-text) !important;
+            background: var(--error-bg) !important;
+        }
+
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--footer-bg);
+            backdrop-filter: blur(12px);
+            padding: 10px 12px 20px;
+            border-radius: 24px 24px 0 0;
+            border-top: 1px solid var(--input-border);
+            z-index: 100;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.05);
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 8px;
+        }
+
+        .shift-badge {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            background: var(--input-bg);
+            padding: 6px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--input-border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sync-status {
+            font-size: 8px;
+            padding: 2px 6px;
+            border-radius: 12px;
+            background: var(--sync-pending);
+            color: white;
+            display: inline-block;
+        }
+
+        .sync-status.success {
+            background: var(--sync-success);
+        }
+
+        .fuel-mini {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 4px;
+            font-size: 10px;
+        }
+
+        .grand-total {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--shift-indicator);
+            letter-spacing: -1px;
+            line-height: 1;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr;
+            gap: 4px;
+        }
+
+        .action {
+            border: none;
+            border-radius: 24px;
+            font-weight: 700;
+            font-size: 9px;
+            height: 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            cursor: pointer;
+            background: var(--input-bg);
+            color: var(--text-primary);
+            border: 1px solid var(--input-border);
+            transition: transform 0.1s;
+        }
+
+        .action:active {
+            transform: scale(0.97);
+        }
+
+        .btn-add { background: #000; color: white; border: none; }
+        .btn-excel { background: #e8f5e9; color: #2e7d32; }
+        .btn-next { background: #fff3e0; color: #ef6c00; }
+        .btn-pdf { background: #ffebee; color: #c62828; }
+        .btn-share { background: #ede9fe; color: #5b21b6; }
+        .btn-wa { background: var(--wa); color: white; border: none; }
+        .btn-history { background: #e0f2fe; color: #0369a1; }
+
+        .action i {
+            font-size: 18px;
+            margin-bottom: 2px;
+        }
+
+        .btn-wa i {
+            font-size: 24px;
+        }
+
+        .rotate-animation {
+            animation: rotate 0.6s linear;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        body.night-mode .btn-excel { background: #1e293b; color: #4ade80; border: 1px solid #4ade80; }
+        body.night-mode .btn-next { background: #1e293b; color: #fbbf24; border: 1px solid #fbbf24; }
+        body.night-mode .btn-pdf { background: #1e293b; color: #f87171; border: 1px solid #f87171; }
+        body.night-mode .btn-share { background: #1e293b; color: #a78bfa; border: 1px solid #a78bfa; }
+        body.night-mode .btn-wa { background: #25D366; color: white; border: none; }
+        body.night-mode .btn-history { background: #1e293b; color: #7dd3fc; border: 1px solid #7dd3fc; }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(0,0,0,0.1);
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 2000;
+            flex-direction: column;
+        }
+
+        .cam-view {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video { width: 100%; height: 100%; object-fit: cover; }
+
+        .guide {
+            position: absolute;
+            width: 80%;
+            height: 100px;
+            border: 2px solid white;
+            border-radius: 20px;
+            box-shadow: 0 0 0 4000px rgba(0,0,0,0.7);
+        }
+
+        .history-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--primary-bg);
+            z-index: 2000;
+            flex-direction: column;
+            padding: 20px 16px;
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .history-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .history-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            width: 44px;
+            height: 44px;
+            border-radius: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .history-close:active {
+            background: var(--input-bg);
+        }
+
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .history-item {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 12px;
+            border: 1px solid var(--input-border);
+            cursor: pointer;
+        }
+
+        .history-item:active {
+            background: var(--input-bg);
+        }
+
+        .history-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .history-item-date {
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .history-item-shift {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: var(--input-bg);
+            color: var(--text-secondary);
+        }
+
+        .history-item-station {
+            font-size: 12px;
+            color: var(--reben-red);
+            margin-bottom: 4px;
+        }
+
+        .history-item-total {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--shift-indicator);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* ===== MOBILE POLISH ===== */
+        html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior-y: none; }
+        body { min-height: 100vh; min-height: 100dvh; padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+        .frozen-header { padding-top: calc(8px + env(safe-area-inset-top)); }
+
+        .price-item input, .app-item input { font-size: 16px; min-width: 0; }
+        .price-item label, .app-item label { font-size: 10px; }
+        .reading-row label { font-size: 10px; }
+        .price-item { min-width: 0; padding: 3px 1px; }
+        .price-apps-btn { flex: 1.1; min-width: 0; font-size: 11px; }
+
+        .nozzle-name { font-size: 16px; width: auto; flex: 1; min-width: 0; padding: 6px 10px; }
+        .fuel-badge { font-size: 16px; padding: 6px 8px; min-height: 36px; }
+        .delete-btn { width: 40px; height: 40px; font-size: 16px; flex-shrink: 0; }
+        .lock-btn { width: 40px; height: 40px; font-size: 16px; flex-shrink: 0; }
+        .cam-btn, .mic-btn { width: 36px; height: 36px; font-size: 14px; }
+        .reading-field { padding-right: 90px; }
+
+        .reading-field { scroll-margin-top: 150px; scroll-margin-bottom: 170px; }
+
+        .footer { padding: 10px 10px calc(12px + env(safe-area-inset-bottom)); transition: transform 0.2s ease; }
+        .footer.kb-hidden { transform: translateY(110%); }
+        .action { font-size: 10px; height: 52px; min-width: 0; letter-spacing: 0; }
+        .action-grid { gap: 4px; }
+        .fuel-mini { font-size: 11px; font-weight: 700; }
+        .diff-badge { font-size: 11px; }
+
+        .history-modal { padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); }
+        .history-list { -webkit-overflow-scrolling: touch; }
+        .history-item { padding: 14px; }
+
+        @media (max-width: 360px) {
+            .price-row { padding: 6px 4px; gap: 2px; }
+            .price-item input, .app-item input { font-size: 15px; }
+            .action i { font-size: 16px; }
+            .action { font-size: 8.5px; }
+            .grand-total { font-size: 24px; }
+        }
+        @media (min-width: 700px) {
+            body { max-width: 640px; margin: 0 auto; }
+            .footer { left: 50%; right: auto; width: 640px; transform: translateX(-50%); }
+            .footer.kb-hidden { transform: translateX(-50%) translateY(110%); }
+        }
+
+        /* ===== Fuel type colours (price pills + nozzle dropdown) ===== */
+        :root { --91-t:#059669; --95-t:#dc2626; --98-t:#7c3aed; --d-t:#d97706; --k-t:#0284c7; }
+        body.night-mode { --91-t:#34d399; --95-t:#f87171; --98-t:#a78bfa; --d-t:#fbbf24; --k-t:#38bdf8; }
+
+        .price-item label { font-size: 9px; font-weight: 800; }
+        .price-item.pf-91 label { color: var(--91-t); }
+        .price-item.pf-95 label { color: var(--95-t); }
+        .price-item.pf-98 label { color: var(--98-t); }
+        .price-item.pf-d  label { color: var(--d-t); }
+        .price-item.pf-k  label { color: var(--k-t); }
+        .price-item.pf-91 { border-color: var(--91); }
+        .price-item.pf-95 { border-color: var(--95); }
+        .price-item.pf-98 { border-color: var(--98); }
+        .price-item.pf-d  { border-color: var(--d); }
+        .price-item.pf-k  { border-color: var(--k); }
+
+        .fuel-badge { font-weight: 800; }
+        .fuel-badge.ft-91 { color: var(--91-t); border-color: var(--91); }
+        .fuel-badge.ft-95 { color: var(--95-t); border-color: var(--95); }
+        .fuel-badge.ft-98 { color: var(--98-t); border-color: var(--98); }
+        .fuel-badge.ft-d  { color: var(--d-t);  border-color: var(--d); }
+        .fuel-badge.ft-k  { color: var(--k-t);  border-color: var(--k); }
+        .fuel-badge option { font-weight: 800; background: #ffffff; }
+        .fuel-badge option[value="91"] { color: #059669; }
+        .fuel-badge option[value="95"] { color: #dc2626; }
+        .fuel-badge option[value="98"] { color: #7c3aed; }
+        .fuel-badge option[value="D"]  { color: #d97706; }
+        .fuel-badge option[value="K"]  { color: #0284c7; }
+
+        /* ===== Android app: native side already handles status/navigation bar space ===== */
+        html.android-app body { padding-left: 6px; padding-right: 6px; }
+        html.android-app .frozen-header { padding-top: 6px; }
+        html.android-app .footer { padding-bottom: 12px; }
+        html.android-app .history-modal { padding: 16px; }
+
+        /* ===== How to Fill Shift Data (tutorial) ===== */
+        .station-card { position: relative; }
+        .station-input { padding-left: 44px; padding-right: 44px; }
+        .tut-help {
+            position: absolute; top: 9px; right: 10px; z-index: 2;
+            width: 28px; height: 28px; padding: 0; border-radius: 50%;
+            border: 1px solid var(--input-border); background: var(--input-bg);
+            color: var(--reben-red); font-weight: 800; font-size: 15px; line-height: 1;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .tut-help:active { opacity: .7; }
+
+        .tut-overlay { display: none; position: fixed; inset: 0; z-index: 3000; background: var(--primary-bg); flex-direction: column; }
+        .tut-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+            padding: calc(14px + env(safe-area-inset-top)) 16px 12px; background: var(--card-bg); border-bottom: 1px solid var(--input-border); }
+        .tut-title { font-size: 20px; font-weight: 800; color: var(--text-primary); }
+        .tut-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .tut-x { flex-shrink: 0; width: 36px; height: 36px; padding: 0; border: none; border-radius: 50%;
+            background: var(--input-bg); color: var(--text-primary); font-size: 22px; line-height: 1;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .tut-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+        .tut-step { background: var(--card-bg); border: 1px solid var(--input-border); border-radius: 22px; padding: 14px; }
+        .tut-step-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+        .tut-num { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--reben-red); color: #fff;
+            font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; }
+        .tut-step h3 { font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0 0 2px; }
+        .tut-step p { font-size: 13px; line-height: 1.4; color: var(--text-secondary); margin: 0; }
+        .tut-foot { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--card-bg); border-top: 1px solid var(--input-border); }
+        .tut-ok { width: 100%; height: 50px; border: none; border-radius: 26px; background: var(--reben-red); color: #fff; font-weight: 800; font-size: 16px; cursor: pointer; }
+        .tut-ok:active { opacity: .85; }
+        html.android-app .tut-head { padding-top: 14px; }
+        html.android-app .tut-foot { padding-bottom: 12px; }
+
+        /* animated mini screens */
+        .tut-screen { position: relative; overflow: hidden; background: var(--primary-bg); border: 1px solid var(--input-border);
+            border-radius: 16px; padding: 12px 10px 20px; transition: background .4s, border-color .4s; }
+        .tut-screen.night { --primary-bg: #0f172a; --card-bg: #1e293b; --text-primary: #f1f5f9; --text-secondary: #94a3b8; --input-bg: #334155; --input-border: #475569; }
+        .tut-chip { position: absolute; top: 4px; right: 9px; font-size: 8px; font-weight: 800; letter-spacing: .6px; color: var(--text-secondary); opacity: .7; }
+        .tut-screen .hl { outline: 2px solid #3b82f6; outline-offset: -2px; }
+        .tut-screen .hl::after { content: '\1F446'; position: absolute; right: 6px; bottom: -13px; font-size: 20px; z-index: 5; pointer-events: none;
+            animation: tutTap .7s ease-in-out infinite alternate; }
+        @keyframes tutTap { from { transform: translate(0,0) scale(1); } to { transform: translate(-3px,-5px) scale(.9); } }
+        @keyframes tutBlink { 50% { opacity: 0; } }
+        @keyframes tutScan { from { top: 0; } to { top: calc(100% - 2px); } }
+
+        .mini-mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+        .mini-card { background: var(--card-bg); border: 1px solid var(--input-border); border-radius: 16px; }
+        .mini-name { position: relative; min-height: 38px; padding: 10px 8px; text-align: center; border-radius: 16px 16px 0 0;
+            border-bottom: 1px solid var(--input-border); font-weight: 800; font-size: 14px; letter-spacing: .5px; color: var(--reben-red); }
+        .mini-name .v:empty::before { content: 'STATION NAME'; color: var(--text-secondary); opacity: .5; }
+        .mini-name.hl .v::after { content: '|'; animation: tutBlink 1s steps(1) infinite; }
+        .mini-prices { display: flex; gap: 4px; padding: 8px; }
+        .mini-pill { position: relative; flex: 1; background: var(--input-bg); border-radius: 30px; padding: 4px 2px; text-align: center; }
+        .mini-pill label { display: block; font-size: 10px; font-weight: 800; }
+        .mini-pill.c91 label { color: var(--91); } .mini-pill.c95 label { color: var(--95); } .mini-pill.cd label { color: var(--d); }
+        .mini-pill span { display: block; font-size: 14px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+        .mini-pill span.empty { color: var(--text-secondary); opacity: .55; }
+        .mini-apps { position: relative; flex: 1; min-width: 60px; background: #000; color: #fff; border-radius: 30px; font-weight: 800; font-size: 11px;
+            display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 4px; border: 1px solid #000; }
+        body.night-mode .mini-apps { background: #1e293b; border-color: #475569; }
+
+        .mini-nozzle { background: var(--card-bg); border: 1px solid var(--input-border); border-left: 5px solid var(--91); border-radius: 16px; padding: 10px; }
+        .mini-nz-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .mini-nz-name { flex: 1; background: var(--input-bg); border-radius: 20px; padding: 6px 12px; font-weight: 800; font-size: 13px; color: var(--text-primary); }
+        .mini-fuel { border: 2px solid var(--91); color: var(--91); border-radius: 20px; padding: 3px 12px; font-weight: 800; font-size: 13px; }
+        .mini-lbl { font-size: 9px; font-weight: 800; letter-spacing: .3px; color: var(--text-secondary); margin: 6px 0 3px 4px; }
+        .mini-field { position: relative; display: flex; align-items: center; gap: 6px; background: var(--input-bg); border-radius: 22px; padding: 4px 4px 4px 12px; min-height: 38px; }
+        .mini-field .val { flex: 1; font-weight: 700; font-size: 15px; color: var(--text-primary); min-height: 20px; }
+        .mini-field .val:empty::before { content: '0.00'; color: var(--text-secondary); opacity: .5; }
+        .mini-ic { position: relative; flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: #334155; color: #fff;
+            display: flex; align-items: center; justify-content: center; font-size: 12px; }
+        .mini-sales { text-align: right; margin-top: 8px; opacity: 0; transform: translateY(4px); transition: opacity .3s, transform .3s; }
+        .mini-sales.on { opacity: 1; transform: none; }
+        .mini-sales span { display: inline-block; background: var(--input-bg); color: var(--text-primary); padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 800; }
+        .scan { display: none; position: absolute; inset: 0; z-index: 6; background: rgba(0,0,0,.84); flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+        .scan.on { display: flex; }
+        .scan-frame { position: relative; overflow: hidden; width: 78%; height: 46px; border: 2px solid #fff; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 16px; letter-spacing: 1px; }
+        .scan-frame::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: #25D366; animation: tutScan .9s linear infinite alternate; }
+        .scan small { color: #e2e8f0; font-size: 10px; font-weight: 700; }
+
+        .mini-topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; }
+        .mini-topbar .nm { flex: 1; text-align: center; font-weight: 800; font-size: 14px; letter-spacing: .5px; color: var(--reben-red); }
+        .mini-topbar .mini-apps { flex: 0 0 auto; padding: 8px 14px; }
+        .mini-panel { max-height: 0; overflow: hidden; transition: max-height .5s ease; }
+        .mini-panel.open { max-height: 170px; }
+        .mini-panel-in { padding: 0 8px 8px; border-top: 1px solid var(--input-border); }
+        .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .mini-cash { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 8px 12px; border-radius: 14px;
+            background: var(--input-bg); font-weight: 800; font-size: 12px; color: var(--text-secondary); }
+        .mini-cash b { font-size: 15px; color: var(--text-primary); transition: transform .25s; }
+        .mini-cash b.pop { transform: scale(1.18); }
+
+        .mini-footer { background: var(--card-bg); border: 1px solid var(--input-border); border-radius: 18px; padding: 8px; }
+        .mini-stats { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .mini-badge { display: flex; align-items: center; gap: 6px; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 20px;
+            padding: 5px 9px; font-size: 9px; font-weight: 800; color: var(--text-secondary); }
+        .mini-total { font-size: 20px; font-weight: 800; color: var(--text-primary); }
+        .mini-actions { display: flex; gap: 5px; }
+        .mini-act { position: relative; flex: 1; height: 46px; border-radius: 20px; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 2px; font-size: 8px; font-weight: 800; }
+        .mini-act i { font-size: 15px; }
+        .ma-pdf { background: #fee2e2; color: #dc2626; } .ma-share { background: #ede9fe; color: #7c3aed; }
+        .ma-shift { background: #fef3c7; color: #d97706; } .ma-wa { background: #25D366; color: #fff; }
+        .tut-screen.night .ma-pdf { background: #1e293b; color: #f87171; border: 1px solid #f87171; }
+        .tut-screen.night .ma-share { background: #1e293b; color: #a78bfa; border: 1px solid #a78bfa; }
+        .tut-screen.night .ma-shift { background: #1e293b; color: #fbbf24; border: 1px solid #fbbf24; }
+        .mini-spacer { height: 38px; }
+        .mini-toast { position: absolute; left: 12px; right: 12px; top: 10px; z-index: 7; display: flex; align-items: center; gap: 8px;
+            background: #111827; color: #fff; border-radius: 12px; padding: 8px 10px; font-size: 11px; font-weight: 700;
+            opacity: 0; transform: translateY(-8px); transition: opacity .3s, transform .3s; }
+        .mini-toast.on { opacity: 1; transform: none; }
+        .mini-toast i { color: #25D366; font-size: 16px; }
+
+        /* language switcher for the guide */
+        .tut-langs { display: flex; gap: 8px; padding: 8px 14px; overflow-x: auto; background: var(--card-bg); border-bottom: 1px solid var(--input-border); }
+        .tut-lang { flex-shrink: 0; min-height: 36px; padding: 0 16px; border-radius: 18px; border: 1px solid var(--input-border);
+            background: var(--input-bg); color: var(--text-primary); font-weight: 700; font-size: 14px; cursor: pointer; }
+        .tut-lang.on { background: var(--reben-red); border-color: var(--reben-red); color: #fff; }
+        #tutorial.tut-nonlatin .tut-title { line-height: 1.4; }
+        #tutorial.tut-nonlatin .tut-sub, #tutorial.tut-nonlatin .tut-step p { line-height: 1.7; }
+        #tutorial.tut-nonlatin .tut-step h3 { line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+<div class="frozen-header">
+    <div class="station-card">
+        <button class="tut-help" onclick="openTutorial()" aria-label="How to use this app">?</button>
+        <input type="text" id="sn" class="station-input" placeholder="STATION NAME" oninput="saveMem()">
+        <div class="price-row">
+            <div class="price-item pf-91"><label>91</label><input type="number" id="p91" step="0.01" placeholder="0.00" oninput="doMath(); saveMem()"></div>
+            <div class="price-item pf-95"><label>95</label><input type="number" id="p95" step="0.01" placeholder="0.00" oninput="doMath(); saveMem()"></div>
+            <div class="price-item pf-98"><label>98</label><input type="number" id="p98" step="0.01" placeholder="0.00" oninput="doMath(); saveMem()"></div>
+            <div class="price-item pf-d"><label>D</label><input type="number" id="pd" step="0.01" placeholder="0.00" oninput="doMath(); saveMem()"></div>
+            <div class="price-item pf-k"><label>K</label><input type="number" id="pk" step="0.01" placeholder="0.00" oninput="doMath(); saveMem()"></div>
+            <button class="price-apps-btn" onclick="toggleApps()" id="appsToggleBtn"><i class="fa-solid fa-plus"></i> APPS</button>
+        </div>
+    </div>
+</div>
+
+<div class="apps-card" id="appsMainCard">
+    <div class="apps-grid" id="appsContainer">
+        <div class="app-item"><label>ATM</label><input type="number" id="appReben" value="0" step="0.01" oninput="calculatePayments(); saveMem()"></div>
+        <div class="app-item"><label>Reben APP</label><input type="number" id="appPetro" value="0" step="0.01" oninput="calculatePayments(); saveMem()"></div>
+        <div class="app-item"><label>Petro APP</label><input type="number" id="appSayyara" value="0" step="0.01" oninput="calculatePayments(); saveMem()"></div>
+        <div class="app-item"><label>Sayyarah APP</label><input type="number" id="appKafarat" value="0" step="0.01" oninput="calculatePayments(); saveMem()"></div>
+        <div class="app-item"><label>Kafart Plus</label><input type="number" id="appVwallet" value="0" step="0.01" oninput="calculatePayments(); saveMem()"></div>
+        <div class="app-item"><label>V-Wallet</label><input type="number" id="appCar" value="0" step="0.01" oninput="calculatePayments(); saveMem()"></div>
+        <div class="app-item"><label>Other</label><input type="number" id="appOther" value="0" step="0.01" oninput="calculatePayments(); saveMem()"></div>
+        <div class="cash-inside-apps" id="cashInsideApps">
+            <span>CASH</span>
+            <span id="cashAmount">0.00</span>
+        </div>
+    </div>
+</div>
+
+<div id="list" class="nozzle-list"></div>
+
+<div class="footer">
+    <div class="stats-row">
+        <div>
+            <div class="shift-badge">
+                <span id="shift-text">DAY SHIFT (6AM-6PM)</span>
+                <span id="shift-icon"><i class="fa-regular fa-sun"></i></span>
+                <span id="syncStatus" class="sync-status">✓ Saved</span>
+            </div>
+            <div class="fuel-mini">
+                <span id="wrap91" style="color:var(--91); display:none">91: <span id="sum91">0</span></span>
+                <span id="wrap95" style="color:var(--95); display:none">95: <span id="sum95">0</span></span>
+                <span id="wrap98" style="color:var(--98); display:none">98: <span id="sum98">0</span></span>
+                <span id="wrapD" style="color:var(--d); display:none">D: <span id="sumD">0</span></span>
+                <span id="wrapK" style="color:var(--k); display:none">K: <span id="sumK">0</span></span>
+            </div>
+        </div>
+        <div class="grand-total" id="grandTotal">0.00</div>
+    </div>
+    <div class="action-grid">
+        <button class="action btn-add" onclick="addNewNozzle()"><i class="fa-solid fa-plus"></i><span>ADD</span></button>
+        <button class="action btn-history" onclick="showHistory()"><i class="fa-solid fa-clock-rotate-left"></i><span>HISTORY</span></button>
+        <button class="action btn-excel" onclick="exportExcel()"><i class="fa-solid fa-file-excel"></i><span>EXCEL</span></button>
+        <button class="action btn-next" id="btnNext" onclick="rotateShift()"><i class="fa-solid fa-rotate" id="shiftIcon"></i><span>SHIFT</span></button>
+        <button class="action btn-pdf" onclick="exportPDF()"><i class="fa-solid fa-file-pdf"></i><span>PDF</span></button>
+        <button class="action btn-share" onclick="sharePDF()"><i class="fa-solid fa-share-nodes"></i><span>SHARE</span></button>
+        <button class="action btn-wa" onclick="shareWA()"><i class="fa-brands fa-whatsapp"></i></button>
+    </div>
+</div>
+
+<div class="tut-overlay" id="tutorial" role="dialog" aria-modal="true" aria-label="How to Fill Shift Data">
+    <div class="tut-head">
+        <div>
+            <div class="tut-title" data-i18n="title">How to Fill Shift Data</div>
+            <div class="tut-sub" data-i18n="sub">Visual guide for station staff · No training needed</div>
+        </div>
+        <button class="tut-x" onclick="closeTutorial()" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="tut-langs" role="group" aria-label="Language">
+        <button class="tut-lang" data-lang="en" onclick="setTutLang('en')">English</button>
+        <button class="tut-lang" data-lang="ar" onclick="setTutLang('ar')">العربية</button>
+        <button class="tut-lang" data-lang="hi" onclick="setTutLang('hi')">हिन्दी</button>
+        <button class="tut-lang" data-lang="ur" onclick="setTutLang('ur')">اردو</button>
+        <button class="tut-lang" data-lang="bn" onclick="setTutLang('bn')">বাংলা</button>
+    </div>
+
+    <div class="tut-scroll">
+
+        <section class="tut-step">
+            <div class="tut-step-head">
+                <div class="tut-num">1</div>
+                <div><h3 data-i18n="s1t">Station &amp; Prices</h3><p data-i18n="s1d">Type Station Name &amp; set fuel prices (91, 95, D).</p></div>
+            </div>
+            <div class="tut-screen tut-demo" data-demo="1">
+                <span class="tut-chip" data-i18n="example">EXAMPLE</span>
+                <div class="mini-card">
+                    <div class="mini-name mini-mono"><span class="v" data-k="name"></span></div>
+                    <div class="mini-prices">
+                        <div class="mini-pill c91"><label>91</label><span class="empty" data-k="p91">0.00</span></div>
+                        <div class="mini-pill c95"><label>95</label><span class="empty" data-k="p95">0.00</span></div>
+                        <div class="mini-pill cd"><label>D</label><span class="empty" data-k="pd">0.00</span></div>
+                        <div class="mini-apps"><i class="fa-solid fa-plus"></i> APPS</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="tut-step">
+            <div class="tut-step-head">
+                <div class="tut-num">2</div>
+                <div><h3 data-i18n="s2t">Initial &amp; Final Meter</h3><p data-i18n="s2d">Type numbers, or tap Camera / Mic to capture.</p></div>
+            </div>
+            <div class="tut-screen tut-demo" data-demo="2">
+                <span class="tut-chip" data-i18n="example">EXAMPLE</span>
+                <div class="mini-nozzle">
+                    <div class="mini-nz-head"><div class="mini-nz-name">Nozzle 1</div><div class="mini-fuel">91</div></div>
+                    <div class="mini-lbl">INITIAL (6 AM)</div>
+                    <div class="mini-field" data-k="iniBox">
+                        <div class="val mini-mono" data-k="ini"></div>
+                        <div class="mini-ic"><i class="fa-solid fa-microphone"></i></div>
+                        <div class="mini-ic"><i class="fa-solid fa-camera"></i></div>
+                    </div>
+                    <div class="mini-lbl">FINAL (6 PM)</div>
+                    <div class="mini-field" data-k="finBox">
+                        <div class="val mini-mono" data-k="fin"></div>
+                        <div class="mini-ic"><i class="fa-solid fa-microphone"></i></div>
+                        <div class="mini-ic" data-k="cam"><i class="fa-solid fa-camera"></i></div>
+                    </div>
+                    <div class="mini-sales" data-k="sales"><span>Sales: 549.70 L</span></div>
+                </div>
+                <div class="scan" data-k="scan">
+                    <div class="scan-frame mini-mono">125980.2</div>
+                    <small>Point the camera at the meter</small>
+                </div>
+            </div>
+        </section>
+
+        <section class="tut-step">
+            <div class="tut-step-head">
+                <div class="tut-num">3</div>
+                <div><h3 data-i18n="s3t">Apps &amp; Cash Check</h3><p data-i18n="s3d">Tap APPS to enter ATM / Reben App totals.</p></div>
+            </div>
+            <div class="tut-screen tut-demo" data-demo="3">
+                <span class="tut-chip" data-i18n="example">EXAMPLE</span>
+                <div class="mini-card">
+                    <div class="mini-topbar">
+                        <div class="nm mini-mono">RIYADH 12</div>
+                        <div class="mini-apps" data-k="appsBtn"><i class="fa-solid fa-plus" data-k="sign"></i> APPS</div>
+                    </div>
+                    <div class="mini-panel" data-k="panel">
+                        <div class="mini-panel-in">
+                            <div class="mini-grid">
+                                <div>
+                                    <div class="mini-lbl">ATM</div>
+                                    <div class="mini-field" data-k="atmBox"><div class="val mini-mono" data-k="atm">0</div></div>
+                                </div>
+                                <div>
+                                    <div class="mini-lbl">Reben APP</div>
+                                    <div class="mini-field" data-k="rebBox"><div class="val mini-mono" data-k="reb">0</div></div>
+                                </div>
+                            </div>
+                            <div class="mini-cash"><span>CASH (auto)</span><b data-k="cash">0.00</b></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="tut-step">
+            <div class="tut-step-head">
+                <div class="tut-num">4</div>
+                <div><h3 data-i18n="s4t">Send &amp; Next Shift</h3><p data-i18n="s4d">Tap WhatsApp to send report, SHIFT to rotate.</p></div>
+            </div>
+            <div class="tut-screen tut-demo" data-demo="4">
+                <span class="tut-chip" data-i18n="example">EXAMPLE</span>
+                <div class="mini-toast" data-k="toast"><i class="fa-brands fa-whatsapp"></i> Report sent to WhatsApp &#10003;</div>
+                <div class="mini-spacer"></div>
+                <div class="mini-footer">
+                    <div class="mini-stats">
+                        <div class="mini-badge"><span data-k="badge">DAY SHIFT (6AM-6PM)</span><i class="fa-regular fa-sun" data-k="bicon"></i></div>
+                        <div class="mini-total mini-mono">549.70</div>
+                    </div>
+                    <div class="mini-actions">
+                        <div class="mini-act ma-pdf"><i class="fa-solid fa-file-pdf"></i>PDF</div>
+                        <div class="mini-act ma-share"><i class="fa-solid fa-share-nodes"></i>SHARE</div>
+                        <div class="mini-act ma-shift" data-k="shift"><i class="fa-solid fa-rotate"></i>SHIFT</div>
+                        <div class="mini-act ma-wa" data-k="wa"><i class="fa-brands fa-whatsapp"></i></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <div class="tut-foot"><button class="tut-ok" onclick="closeTutorial()" data-i18n="ok">Got it &mdash; start</button></div>
+</div>
+
+<div class="modal" id="scanner">
+    <div class="cam-view">
+        <div id="flash" style="position:absolute; inset:0; background:var(--wa); opacity:0; z-index:15; pointer-events:none;"></div>
+        <video id="v" autoplay playsinline></video>
+        <div class="guide"></div>
+        <div style="position:absolute; bottom:calc(40px + env(safe-area-inset-bottom)); left:0; right:0; display:flex; justify-content:center; gap:20px; z-index:20;">
+            <button onclick="toggleTorch()" style="width:56px; height:56px; border-radius:50%; background:rgba(255,255,255,0.2); border:none; color:white; font-size:20px; backdrop-filter:blur(4px);"><i class="fa-solid fa-bolt"></i></button>
+            <button onclick="stopCam()" style="width:56px; height:56px; border-radius:50%; background:rgba(255,0,0,0.4); border:none; color:white; font-size:20px; backdrop-filter:blur(4px);"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+    </div>
+    <canvas id="c" style="display:none"></canvas>
+</div>
+
+<div class="history-modal" id="historyModal">
+    <div class="history-header">
+        <span class="history-title">📋 Last 90 Days</span>
+        <button class="history-close" onclick="closeHistory()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="history-list" id="historyList"></div>
+</div>
+
+<script>
+
+    // ===== Android app bridge (only active inside the Android app) =====
+    const IS_ANDROID_APP = typeof window.AndroidBridge !== 'undefined';
+    function blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(String(fr.result).split(',')[1]);
+            fr.onerror = reject;
+            fr.readAsDataURL(blob);
+        });
+    }
+    async function saveDocFile(doc, fileName) {
+        if (!IS_ANDROID_APP) { doc.save(fileName); return; }
+        const b64 = await blobToBase64(doc.output('blob'));
+        window.AndroidBridge.saveFile(b64, fileName, 'application/pdf');
+    }
+    function saveXlsxFile(wb, fileName) {
+        if (!IS_ANDROID_APP) { XLSX.writeFile(wb, fileName); return; }
+        const b64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+        window.AndroidBridge.saveFile(b64, fileName,
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+    function openExternal(url) {
+        if (IS_ANDROID_APP) {
+            const k = url.indexOf('?text=');
+            if (url.startsWith('https://wa.me/') && k > -1) {
+                const text = url.substring(k + 6).replace(/%0A/gi, '\n');
+                window.AndroidBridge.shareWhatsApp(text);
+            } else {
+                window.AndroidBridge.openUrl(url);
+            }
+        } else {
+            window.open(url, '_blank');
+        }
+    }
+    // Tell the Android shell when night mode is on, so the status bar colour matches
+    if (IS_ANDROID_APP) {
+        const syncBars = () => {
+            try { window.AndroidBridge.setNightMode(document.body.classList.contains('night-mode')); } catch (e) {}
+        };
+        syncBars();
+        new MutationObserver(syncBars).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    }
+    // ===== end Android app bridge =====
+    let nozzleCount = 0, activeId = null, stream = null, isScanning = false, worker = null;
+    let isDayTime = true;
+    let torchOn = false;
+    let recognition = null;
+    let currentActiveMicButton = null;
+
+    const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyLrGK3QJ2OJbA421kNuY68KLjSjkAVqm7GDdnctrTaRPwpjlwXORv6PyWc14Uek-Qfpg/exec';
+
+    // REPORT LOG + QR VERIFICATION: uses the same web app as the station sync above (Code.gs, deployment Version 5).
+    // To switch it off, change it to '' - the PDF then works as before and the QR holds a short text instead of a link.
+    const REPORT_API_URL = GOOGLE_SHEET_URL;
+    const REPORT_QUEUE_KEY = 'reben_report_queue';
+
+    // Preload logo.png with exact aspect ratio preservation
+    let cachedLogoInfo = null;
+    function loadCompanyLogo() {
+        return new Promise((resolve) => {
+            if (cachedLogoInfo) return resolve(cachedLogoInfo);
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.onload = function () {
+                try {
+                    const w = img.naturalWidth || img.width;
+                    const h = img.naturalHeight || img.height;
+                    // Downscale to a print-sharp but small size (max 480px on the long side)
+                    // so the PDF stays tiny instead of embedding the full-resolution logo.
+                    const MAX_LOGO_PX = 480;
+                    const scale = Math.min(1, MAX_LOGO_PX / Math.max(w, h));
+                    const cw = Math.max(1, Math.round(w * scale));
+                    const ch = Math.max(1, Math.round(h * scale));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = cw;
+                    canvas.height = ch;
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, 0, 0, cw, ch);
+                    cachedLogoInfo = {
+                        dataUrl: canvas.toDataURL('image/png'),
+                        aspectRatio: w && h ? (w / h) : 1
+                    };
+                    resolve(cachedLogoInfo);
+                } catch (e) {
+                    resolve(null);
+                }
+            };
+            img.onerror = function () { resolve(null); };
+            img.src = 'logo.png';
+        });
+    }
+    window.addEventListener('DOMContentLoaded', loadCompanyLogo);
+
+    function initSpeechRecognition() {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            recognition.maxAlternatives = 1;
+            return true;
+        }
+        return false;
+    }
+
+    initSpeechRecognition();
+
+    async function initAI() {
+        try {
+            worker = await Tesseract.createWorker();
+            await worker.loadLanguage('eng');
+            await worker.initialize('eng');
+            await worker.setParameters({
+                tessedit_char_whitelist: '0123456789.',
+                tessedit_pageseg_mode: '7'
+            });
+        } catch (error) {
+            console.error('OCR init error:', error);
+        }
+    }
+    initAI();
+
+    function playBeep() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.1);
+            if (audioContext.state === 'suspended') audioContext.resume();
+        } catch (e) {}
+    }
+
+    function removeMicActiveClass() {
+        if (currentActiveMicButton) {
+            currentActiveMicButton.classList.remove('listening');
+            currentActiveMicButton = null;
+        }
+    }
+
+    function startVoice(inputId, buttonElement) {
+        removeMicActiveClass();
+        buttonElement.classList.add('listening');
+        currentActiveMicButton = buttonElement;
+
+        if (!recognition) {
+            if (!initSpeechRecognition()) {
+                alert("Voice recognition is not supported in this browser.");
+                removeMicActiveClass();
+                return;
+            }
+        }
+
+        try {
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                const numbers = transcript.match(/\d+\.?\d*/g);
+                if (numbers && numbers.length > 0) {
+                    document.getElementById(inputId).value = numbers[0];
+                    doMath();
+                    saveMem();
+                    afterReadingSet(inputId);
+                } else {
+                    alert("No numbers detected.");
+                }
+                removeMicActiveClass();
+            };
+            recognition.onerror = function() { removeMicActiveClass(); };
+            recognition.onend = function() { removeMicActiveClass(); };
+            recognition.start();
+        } catch (error) {
+            removeMicActiveClass();
+        }
+    }
+
+    async function startScan(id) {
+        activeId = id;
+        isScanning = true;
+        document.getElementById('scanner').style.display = 'flex';
+        try {
+            if (stream) stream.getTracks().forEach(t => t.stop());
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+            });
+            const videoElement = document.getElementById('v');
+            videoElement.srcObject = stream;
+            videoElement.onloadedmetadata = () => {
+                videoElement.play();
+                tick();
+            };
+        } catch (error) {
+            alert("Could not access camera.");
+            stopCam();
+        }
+    }
+
+    function stopCam() {
+        isScanning = false;
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+        }
+        document.getElementById('scanner').style.display = 'none';
+        torchOn = false;
+    }
+
+    async function toggleTorch() {
+        if (!stream) return;
+        try {
+            const track = stream.getVideoTracks()[0];
+            if (track && track.getCapabilities().torch) {
+                torchOn = !torchOn;
+                await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+            }
+        } catch (error) {}
+    }
+
+    function sanitizeOCR(text) {
+        return text.replace(/[^\d.]/g, '');
+    }
+
+    async function tick() {
+        if (!isScanning) return;
+        const v = document.getElementById('v');
+        const c = document.getElementById('c');
+        if (!v || !c) return;
+
+        if (v.readyState === v.HAVE_ENOUGH_DATA) {
+            const ctx = c.getContext('2d');
+            const width = v.videoWidth;
+            const height = v.videoHeight;
+
+            if (width && height) {
+                const captureWidth = width * 0.8;
+                const captureHeight = height * 0.2;
+                const captureX = (width - captureWidth) / 2;
+                const captureY = (height - captureHeight) / 2;
+
+                c.width = captureWidth;
+                c.height = captureHeight;
+                ctx.filter = 'contrast(1.5) grayscale(1) brightness(1.1)';
+                ctx.drawImage(v, captureX, captureY, captureWidth, captureHeight, 0, 0, captureWidth, captureHeight);
+
+                try {
+                    if (worker) {
+                        let { data: { text, confidence } } = await worker.recognize(c);
+                        text = sanitizeOCR(text);
+                        const match = text.match(/\d+\.?\d*/g);
+
+                        if (match && match.length > 0 && confidence > 50) {
+                            document.getElementById('flash').style.animation = 'flashAnim 0.3s ease-out';
+                            playBeep();
+                            document.getElementById(activeId).value = match[0];
+                            doMath();
+                            saveMem();
+                            afterReadingSet(activeId);
+                            setTimeout(() => {
+                                document.getElementById('flash').style.animation = '';
+                                stopCam();
+                            }, 300);
+                            return;
+                        }
+                    }
+                } catch (err) {}
+            }
+        }
+        if (isScanning) setTimeout(tick, 200);
+    }
+
+    function toggleApps() {
+        const appsCard = document.getElementById('appsMainCard');
+        const btn = document.getElementById('appsToggleBtn');
+
+        if (!appsCard.classList.contains('visible')) {
+            appsCard.classList.add('visible');
+            btn.innerHTML = '<i class="fa-solid fa-minus"></i> APPS';
+            setTimeout(() => {
+                const headerHeight = document.querySelector('.frozen-header').offsetHeight;
+                const elementPosition = appsCard.getBoundingClientRect().top + window.pageYOffset;
+                window.scrollTo({ top: elementPosition - headerHeight - 20, behavior: 'smooth' });
+            }, 100);
+        } else {
+            appsCard.classList.remove('visible');
+            btn.innerHTML = '<i class="fa-solid fa-plus"></i> APPS';
+        }
+        saveMem();
+    }
+
+    function calculatePayments() {
+        const total = parseFloat(document.getElementById('grandTotal').innerText.replace(/,/g, '')) || 0;
+        const r = parseFloat(document.getElementById('appReben').value) || 0;
+        const p = parseFloat(document.getElementById('appPetro').value) || 0;
+        const s = parseFloat(document.getElementById('appSayyara').value) || 0;
+        const k = parseFloat(document.getElementById('appKafarat').value) || 0;
+        const v = parseFloat(document.getElementById('appVwallet').value) || 0;
+        const c = parseFloat(document.getElementById('appCar').value) || 0;
+        const o = parseFloat(document.getElementById('appOther').value) || 0;
+
+        const appsTotal = r + p + s + k + v + c + o;
+        const cash = total - appsTotal;
+
+        document.getElementById('cashAmount').innerText = cash.toFixed(2);
+        return { total, appsTotal, cash, r, p, s, k, v, c, o };
+    }
+
+    // Station name without leading/trailing spaces (also NBSP / zero-width) so WhatsApp *bold* works
+    // Long station names shrink to fit when not editing (stays 16px while typing so phones don't zoom in)
+    function fitStationName() {
+        const el = document.getElementById('sn');
+        if (!el) return;
+        el.style.fontSize = '';
+        if (document.activeElement === el) return;
+        let size = 16;
+        while (el.scrollWidth > el.clientWidth && size > 10) { size -= 0.5; el.style.fontSize = size + 'px'; }
+    }
+    (function () {
+        const el = document.getElementById('sn');
+        el.addEventListener('blur', fitStationName);
+        el.addEventListener('focus', fitStationName);
+        window.addEventListener('load', () => { fitStationName(); setTimeout(fitStationName, 600); });
+        window.addEventListener('resize', fitStationName);
+        window.addEventListener('pageshow', fitStationName);
+    })();
+
+    function getStationName() {
+        return String(document.getElementById('sn').value || '')
+            .replace(/^[\s\u00A0\u200B-\u200F\u2060\uFEFF]+|[\s\u00A0\u200B-\u200F\u2060\uFEFF]+$/g, '')
+            .toUpperCase();
+    }
+
+    function fuelUsed(type) {
+        return Array.from(document.querySelectorAll('.nozzle-card')).some(row => {
+            const id = row.id.split('-')[1];
+            if (document.getElementById(`type-${id}`).value !== type) return false;
+            return document.getElementById(`i${id}`).value.trim() !== '' || document.getElementById(`f${id}`).value.trim() !== '';
+        });
+    }
+
+    let validateMsg = "Please complete Station Name and Prices";
+
+    function validate() {
+        let valid = true;
+        validateMsg = "Please complete Station Name and Prices";
+
+        const sn = document.getElementById('sn');
+        sn.classList.remove('invalid');
+        if (!sn.value || sn.value.trim() === "") { sn.classList.add('invalid'); valid = false; }
+
+        let anyUsed = false;
+        [['91','p91'],['95','p95'],['98','p98'],['D','pd'],['K','pk']].forEach(([t,pid]) => {
+            const f = document.getElementById(pid);
+            f.classList.remove('invalid');
+            if (fuelUsed(t)) {
+                anyUsed = true;
+                if (!f.value || parseFloat(f.value) <= 0) { f.classList.add('invalid'); valid = false; }
+            }
+        });
+        if (!anyUsed) {
+            valid = false;
+            if (sn.value && sn.value.trim() !== "") validateMsg = "Please enter at least one nozzle reading";
+        }
+        return valid;
+    }
+
+    function addNewNozzle(saved = null) {
+        nozzleCount++;
+        const id = nozzleCount;
+        const div = document.createElement('div');
+        div.className = `nozzle-card card-${saved ? saved.type.toLowerCase() : '91'}`;
+        div.id = `card-${id}`;
+
+        const labelI = isDayTime ? "INITIAL (6 AM)" : "INITIAL (6 PM)";
+        const labelF = isDayTime ? "FINAL (6 PM)" : "FINAL (6 AM)";
+
+        div.innerHTML = `
+            <div class="card-header">
+                <input class="nozzle-name" value="${saved ? saved.name : 'Nozzle ' + id}" id="name-${id}" oninput="saveMem()" placeholder="Nozzle ${id}">
+                <select class="fuel-badge ft-${saved ? saved.type.toLowerCase() : '91'}" id="type-${id}" onchange="updateRowColor(${id}); saveMem()">
+                    <option value="91" ${saved?.type=='91'?'selected':''}>91</option>
+                    <option value="95" ${saved?.type=='95'?'selected':''}>95</option>
+                    <option value="98" ${saved?.type=='98'?'selected':''}>98</option>
+                    <option value="D" ${saved?.type=='D'?'selected':''}>D</option>
+                    <option value="K" ${saved?.type=='K'?'selected':''}>K</option>
+                </select>
+                <button class="lock-btn" id="lock-${id}" type="button" onclick="toggleInitLock(${id})"><i class="fa-solid fa-lock-open"></i></button>
+                <button class="delete-btn" onclick="if(!confirm('Delete this nozzle?')) return; this.parentElement.parentElement.remove(); doMath(); saveMem();"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            <div class="reading-stack">
+                <div class="reading-row">
+                    <label>${labelI}</label>
+                    <input type="number" id="i${id}" class="reading-field" value="${saved?saved.init:''}" placeholder="0.00" oninput="doMath(); saveMem()" onchange="onInitChange(${id})" onclick="onInitTap(${id})">
+                    <div class="action-buttons">
+                        <button class="mic-btn" onclick="startVoice('i${id}', this)" type="button"><i class="fa-solid fa-microphone"></i></button>
+                        <button class="cam-btn" onclick="startScan('i${id}')" type="button"><i class="fa-solid fa-camera"></i></button>
+                    </div>
+                </div>
+                <div class="reading-row">
+                    <label>${labelF}</label>
+                    <input type="number" id="f${id}" class="reading-field" value="${saved?saved.final:''}" placeholder="0.00" oninput="doMath(); saveMem()">
+                    <div class="action-buttons">
+                        <button class="mic-btn" onclick="startVoice('f${id}', this)" type="button"><i class="fa-solid fa-microphone"></i></button>
+                        <button class="cam-btn" onclick="startScan('f${id}')" type="button"><i class="fa-solid fa-camera"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end;">
+                <div class="diff-badge" id="diff-${id}">Sales: 0.00 L</div>
+            </div>
+        `;
+        document.getElementById('list').appendChild(div);
+        // INITIAL reading starts locked whenever it already has a value (from the last shift or from saved data)
+        const savedInit = saved ? String(saved.init === undefined || saved.init === null ? '' : saved.init).trim() : '';
+        div.dataset.initOrig = savedInit !== ''
+            ? String(saved.initOrig !== undefined && String(saved.initOrig).trim() !== '' ? saved.initOrig : savedInit).trim()
+            : '';
+        setInitLock(id, savedInit !== '');
+        if(!saved) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+
+    // ==========================================
+    // INITIAL (OPENING) READING LOCK
+    // ==========================================
+    function setInitLock(id, locked) {
+        const inp = document.getElementById(`i${id}`);
+        const btn = document.getElementById(`lock-${id}`);
+        if (!inp || !btn) return;
+        if (locked && inp.value.trim() === '') locked = false;   // nothing to protect yet
+        inp.readOnly = locked;
+        inp.classList.toggle('is-locked', locked);
+        inp.closest('.reading-row').querySelectorAll('.action-buttons button').forEach(b => { b.disabled = locked; });
+        btn.classList.toggle('unlocked', !locked);
+        btn.innerHTML = locked ? '<i class="fa-solid fa-lock"></i>' : '<i class="fa-solid fa-lock-open"></i>';
+        btn.title = locked ? 'Initial reading is locked. Tap to unlock.' : 'Initial reading is unlocked.';
+        btn.setAttribute('aria-label', btn.title);
+    }
+
+    function toggleInitLock(id) {
+        const inp = document.getElementById(`i${id}`);
+        if (inp.readOnly) {
+            if (!confirm('Unlock INITIAL reading?\n\nOnly do this if the initial reading is wrong.\nThe change is recorded in the report log.')) return;
+            setInitLock(id, false);
+            inp.focus();
+            try { inp.select(); } catch (e) {}
+        } else if (inp.value.trim() !== '') {
+            setInitLock(id, true);
+        }
+    }
+
+    function onInitChange(id) {
+        const inp = document.getElementById(`i${id}`);
+        const card = document.getElementById(`card-${id}`);
+        if (!inp || !card || inp.value.trim() === '') return;
+        if (!card.dataset.initOrig) card.dataset.initOrig = inp.value.trim();   // first value that was locked in
+        setInitLock(id, true);
+        saveMem();
+    }
+
+    function onInitTap(id) {
+        const inp = document.getElementById(`i${id}`);
+        if (inp && inp.readOnly) showAppToast('🔒 Initial reading is locked. Tap the lock icon to unlock it.', '', 3500);
+    }
+
+    function afterReadingSet(fieldId) {
+        const m = /^i(\d+)$/.exec(String(fieldId));
+        if (m) onInitChange(m[1]);
+    }
+
+    function saveShiftToHistory() {
+        const station = getStationName();
+        if (!station) return;
+
+        const now = new Date();
+        const shiftData = {
+            id: Date.now(),
+            timestamp: now.toISOString(),
+            date: formatDateForHistory(now),
+            shift: isDayTime ? "Day" : "Night",
+            station: station,
+            prices: {
+                p91: document.getElementById('p91').value,
+                p95: document.getElementById('p95').value,
+                p98: document.getElementById('p98').value,
+                pd: document.getElementById('pd').value,
+                pk: document.getElementById('pk').value
+            },
+            summary: {
+                q91: document.getElementById('sum91').innerText,
+                q95: document.getElementById('sum95').innerText,
+                q98: document.getElementById('sum98').innerText,
+                qD: document.getElementById('sumD').innerText,
+                qK: document.getElementById('sumK').innerText,
+                total: document.getElementById('grandTotal').innerText
+            },
+            payments: calculatePayments(),
+            nozzles: []
+        };
+
+        document.querySelectorAll('.nozzle-card').forEach(row => {
+            const id = row.id.split('-')[1];
+            shiftData.nozzles.push({
+                name: document.getElementById(`name-${id}`).value,
+                type: document.getElementById(`type-${id}`).value,
+                init: document.getElementById(`i${id}`).value,
+                final: document.getElementById(`f${id}`).value,
+                diff: document.getElementById(`diff-${id}`).innerText
+            });
+        });
+
+        let history = JSON.parse(localStorage.getItem('reben_history')) || [];
+        history.unshift(shiftData);
+
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        history = history.filter(item => new Date(item.timestamp) > ninetyDaysAgo);
+
+        localStorage.setItem('reben_history', JSON.stringify(history));
+        document.getElementById('syncStatus').innerText = '✓ Saved';
+        document.getElementById('syncStatus').classList.add('success');
+    }
+
+    function formatDateForHistory(date) {
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = date.toLocaleString('en-US', { month: 'short' });
+        const year = date.getFullYear();
+        return `${day} - ${month} - ${year}`;
+    }
+
+    function showHistory() {
+        const history = JSON.parse(localStorage.getItem('reben_history')) || [];
+        const historyList = document.getElementById('historyList');
+
+        if (history.length === 0) {
+            historyList.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">No history available</div>';
+        } else {
+            historyList.innerHTML = history.map(item => `
+                <div class="history-item" onclick="viewHistoryItem(${item.id})">
+                    <div class="history-item-header">
+                        <span class="history-item-date">${item.date}</span>
+                        <span class="history-item-shift">${item.shift}</span>
+                    </div>
+                    <div class="history-item-station">${item.station}</div>
+                    <div class="history-item-total">${item.summary.total} SAR</div>
+                </div>
+            `).join('');
+        }
+        document.getElementById('historyModal').style.display = 'flex';
+    }
+
+    function viewHistoryItem(id) {
+        const history = JSON.parse(localStorage.getItem('reben_history')) || [];
+        const item = history.find(h => h.id === id);
+        if (!item) return;
+
+        document.getElementById('sn').value = item.station; fitStationName();
+        document.getElementById('p91').value = item.prices.p91;
+        document.getElementById('p95').value = item.prices.p95;
+        document.getElementById('p98').value = item.prices.p98 || "";
+        document.getElementById('pd').value = item.prices.pd;
+        document.getElementById('pk').value = item.prices.pk || "";
+
+        document.getElementById('appReben').value = item.payments.r;
+        document.getElementById('appPetro').value = item.payments.p;
+        document.getElementById('appSayyara').value = item.payments.s;
+        document.getElementById('appKafarat').value = item.payments.k;
+        document.getElementById('appVwallet').value = item.payments.v;
+        document.getElementById('appCar').value = item.payments.c;
+        document.getElementById('appOther').value = item.payments.o;
+
+        document.getElementById('list').innerHTML = '';
+        nozzleCount = 0;
+
+        item.nozzles.forEach(n => {
+            addNewNozzle({ name: n.name, type: n.type, init: n.init, final: n.final });
+        });
+
+        isDayTime = item.shift === "Day";
+        document.getElementById('shift-text').innerText = isDayTime ? "DAY SHIFT (6AM-6PM)" : "NIGHT SHIFT (6PM-6AM)";
+        if (isDayTime) {
+            document.body.classList.remove('night-mode');
+            document.getElementById('shift-icon').innerHTML = '<i class="fa-regular fa-sun"></i>';
+        } else {
+            document.body.classList.add('night-mode');
+            document.getElementById('shift-icon').innerHTML = '<i class="fa-regular fa-moon"></i>';
+        }
+
+        doMath();
+        calculatePayments();
+        closeHistory();
+    }
+
+    function closeHistory() {
+        document.getElementById('historyModal').style.display = 'none';
+    }
+
+    async function syncToSheet() {
+        saveShiftToHistory();
+        if (!GOOGLE_SHEET_URL || GOOGLE_SHEET_URL.includes('YOUR_GOOGLE_SCRIPT_URL_HERE')) return;
+        if (!navigator.onLine) {
+            document.getElementById('syncStatus').innerText = '⏳ Pending';
+            document.getElementById('syncStatus').classList.remove('success');
+            return;
+        }
+
+        const station = getStationName();
+        const p91 = parseFloat(document.getElementById('p91').value) || 0;
+        const p95 = parseFloat(document.getElementById('p95').value) || 0;
+        const p98 = parseFloat(document.getElementById('p98').value) || 0;
+        const pd = parseFloat(document.getElementById('pd').value) || 0;
+        const pk = parseFloat(document.getElementById('pk').value) || 0;
+
+        const q91 = parseFloat(document.getElementById('sum91').innerText) || 0;
+        const q95 = parseFloat(document.getElementById('sum95').innerText) || 0;
+        const q98 = parseFloat(document.getElementById('sum98').innerText) || 0;
+        const qd = parseFloat(document.getElementById('sumD').innerText) || 0;
+        const qk = parseFloat(document.getElementById('sumK').innerText) || 0;
+        const payments = calculatePayments();
+
+        const payload = {
+            summary: {
+                q91, q95, q98, qd, qk,
+                totalAmt: document.getElementById('grandTotal').innerText,
+                amt91: (q91 * p91).toFixed(2),
+                amt95: (q95 * p95).toFixed(2),
+                amt98: (q98 * p98).toFixed(2),
+                amtD: (qd * pd).toFixed(2),
+                amtK: (qk * pk).toFixed(2),
+                payments: {
+                    reben: payments.r, petro: payments.p, sayyara: payments.s,
+                    kafarat: payments.k, vwallet: payments.v, car: payments.c,
+                    other: payments.o, appsTotal: payments.appsTotal, cash: payments.cash
+                }
+            },
+            prices: { p91, p95, p98, pd, pk },
+            rows: []
+        };
+
+        document.querySelectorAll('.nozzle-card').forEach(row => {
+            const id = row.id.split('-')[1];
+            const init = parseFloat(document.getElementById(`i${id}`).value) || 0;
+            const final = parseFloat(document.getElementById(`f${id}`).value) || 0;
+            payload.rows.push({
+                syncTime: new Date().toLocaleTimeString(),
+                date: getTopDateStr(),
+                shift: isDayTime ? "Day" : "Night",
+                station: station,
+                nozzle: document.getElementById(`name-${id}`).value,
+                fuelType: document.getElementById(`type-${id}`).value,
+                initial: init,
+                final: final,
+                diff: Math.max(0, final - init).toFixed(2)
+            });
+        });
+
+        try {
+            await fetch(GOOGLE_SHEET_URL, {
+                method: 'POST', mode: 'no-cors', cache: 'no-cache',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            document.getElementById('syncStatus').innerText = '✓ Synced';
+            document.getElementById('syncStatus').classList.add('success');
+        } catch (e) {
+            document.getElementById('syncStatus').innerText = '⏳ Pending';
+            document.getElementById('syncStatus').classList.remove('success');
+        }
+    }
+
+    function shiftPeriod(date) {
+        const localMs = date.getTime() - date.getTimezoneOffset() * 60000;
+        return Math.floor((localMs - 6 * 3600000) / (12 * 3600000));
+    }
+
+    async function rotateShift(auto = false) {
+        if (auto !== true) {
+            const missing = Array.from(document.querySelectorAll('.nozzle-card')).filter(row => {
+                const id = row.id.split('-')[1];
+                return document.getElementById(`f${id}`).value.trim() === '';
+            }).length;
+            let q = "Start Next Shift? Final values will become Initial values.";
+            if (missing > 0) q += `\n\n${missing} nozzle(s) have no FINAL reading - their INITIAL reading will stay as it is.`;
+            if(!confirm(q)) return;
+        }
+
+        const btn = document.getElementById('btnNext');
+        const shiftIcon = document.getElementById('shiftIcon');
+        shiftIcon.classList.add('rotate-animation');
+        btn.disabled = true;
+        btn.innerHTML = `<div class="spinner"></div><span>SYNC</span>`;
+
+        try {
+            try { await syncToSheet(); } catch (e) {}
+            isDayTime = (auto === true) ? (((shiftPeriod(new Date()) % 2) + 2) % 2 === 0) : !isDayTime;
+            document.getElementById('shift-text').innerText = isDayTime ? "DAY SHIFT (6AM-6PM)" : "NIGHT SHIFT (6PM-6AM)";
+
+            if (isDayTime) {
+                document.body.classList.remove('night-mode');
+                document.getElementById('shift-icon').innerHTML = '<i class="fa-regular fa-sun"></i>';
+            } else {
+                document.body.classList.add('night-mode');
+                document.getElementById('shift-icon').innerHTML = '<i class="fa-regular fa-moon"></i>';
+            }
+
+            document.querySelectorAll('.nozzle-card').forEach(row => {
+                const id = row.id.split('-')[1];
+                const finalVal = document.getElementById(`f${id}`).value.trim();
+                if (finalVal !== "") {
+                    document.getElementById(`i${id}`).value = finalVal;
+                    row.dataset.initOrig = finalVal;      // new official opening reading for this shift
+                    setInitLock(id, true);
+                }
+                document.getElementById(`f${id}`).value = "";
+                row.querySelectorAll('label')[0].innerText = isDayTime ? "INITIAL (6 AM)" : "INITIAL (6 PM)";
+                row.querySelectorAll('label')[1].innerText = isDayTime ? "FINAL (6 PM)" : "FINAL (6 AM)";
+            });
+            doMath();
+            saveMem();
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-rotate" id="shiftIcon"></i><span>SHIFT</span>`;
+            setTimeout(() => {
+                const newIcon = document.getElementById('shiftIcon');
+                if(newIcon) newIcon.classList.remove('rotate-animation');
+            }, 600);
+        }
+    }
+
+    function doMath() {
+        let total = 0, q91 = 0, q95 = 0, q98 = 0, qd = 0, qk = 0;
+        const pr91 = parseFloat(document.getElementById('p91').value) || 0;
+        const pr95 = parseFloat(document.getElementById('p95').value) || 0;
+        const pr98 = parseFloat(document.getElementById('p98').value) || 0;
+        const prd = parseFloat(document.getElementById('pd').value) || 0;
+        const prk = parseFloat(document.getElementById('pk').value) || 0;
+
+        document.querySelectorAll('.nozzle-card').forEach(row => {
+            const id = row.id.split('-')[1];
+            const type = document.getElementById(`type-${id}`).value;
+            const initVal = parseFloat(document.getElementById(`i${id}`).value) || 0;
+            const finalVal = parseFloat(document.getElementById(`f${id}`).value) || 0;
+            const diff = finalVal - initVal;
+            const diffTag = document.getElementById(`diff-${id}`);
+
+            if (finalVal > 0 && diff < 0) {
+                diffTag.innerText = `Error: End < Start`;
+                diffTag.classList.add('diff-error');
+            } else {
+                const actualDiff = Math.max(0, diff);
+                diffTag.innerText = `Sales: ${actualDiff.toFixed(2)} L`;
+                diffTag.classList.remove('diff-error');
+
+                if(type === '91') { q91 += actualDiff; total += actualDiff * pr91; }
+                else if(type === '95') { q95 += actualDiff; total += actualDiff * pr95; }
+                else if(type === '98') { q98 += actualDiff; total += actualDiff * pr98; }
+                else if(type === 'K') { qk += actualDiff; total += actualDiff * prk; }
+                else { qd += actualDiff; total += actualDiff * prd; }
+            }
+        });
+        document.getElementById('sum91').innerText = q91.toFixed(2);
+        document.getElementById('sum95').innerText = q95.toFixed(2);
+        document.getElementById('sum98').innerText = q98.toFixed(2);
+        document.getElementById('sumD').innerText = qd.toFixed(2);
+        document.getElementById('sumK').innerText = qk.toFixed(2);
+        [['91','wrap91'],['95','wrap95'],['98','wrap98'],['D','wrapD'],['K','wrapK']].forEach(([t,w]) => {
+            document.getElementById(w).style.display = fuelUsed(t) ? '' : 'none';
+        });
+        document.getElementById('grandTotal').innerText = total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        calculatePayments();
+    }
+
+    function formatDate(date) {
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = date.toLocaleString('en-US', { month: 'short' });
+        const year = date.getFullYear();
+        return `${day} - ${month} - ${year}`;
+    }
+
+    function getTopDateStr() {
+        const d = new Date();
+        if (!isDayTime) d.setDate(d.getDate() - 1);
+        return formatDate(d);
+    }
+
+    function shareWA() {
+        if(!validate()) { alert(validateMsg); return; }
+        const station = getStationName();
+        const shift = isDayTime ? "Day" : "Night";
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+        function formatDateForReport(date) {
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = date.toLocaleString('en-US', { month: 'short' });
+            const year = date.getFullYear();
+            return `${day} - ${month} - ${year}`;
+        }
+
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayDateStr = formatDateForReport(yesterday);
+        const todayDateStr = formatDateForReport(now);
+
+        const payments = calculatePayments();
+        const sum91 = parseFloat(document.getElementById('sum91').innerText) || 0;
+        const sum95 = parseFloat(document.getElementById('sum95').innerText) || 0;
+        const sum98 = parseFloat(document.getElementById('sum98').innerText) || 0;
+        const sumD = parseFloat(document.getElementById('sumD').innerText) || 0;
+        const sumK = parseFloat(document.getElementById('sumK').innerText) || 0;
+        const grandTotal = document.getElementById('grandTotal').innerText;
+
+        let msg = `*⛽Station Report*%0A%0A`;
+        msg += `    *${station}*%0A`;
+        msg += `     Date ${!isDayTime ? yesterdayDateStr : todayDateStr}%0A`;
+        msg += `     Shift - ${shift}%0A`;
+        msg += `     Reporting Time - ${timeStr}%0A%0A`;
+        msg += `---- SUMMARY ----%0A%0A`;
+        if (fuelUsed('91')) msg += ` *🟢91 Total:* ${sum91.toFixed(2)} L%0A`;
+        if (fuelUsed('95')) msg += ` *🔴95 Total:* ${sum95.toFixed(2)} L%0A`;
+        if (fuelUsed('98')) msg += ` *🟣98 Total:* ${sum98.toFixed(2)} L%0A`;
+        if (fuelUsed('D')) msg += ` *🟡D   Total:* ${sumD.toFixed(2)} L%0A`;
+        if (fuelUsed('K')) msg += ` *🔵K   Total:* ${sumK.toFixed(2)} L%0A`;
+        msg += ` *💰Total Amount:* ${grandTotal} SAR%0A%0A`;
+
+        msg += `---- PAYMENTS ----%0A`;
+        if(payments.r > 0) msg += `     ATM: ${payments.r.toFixed(2)} SAR%0A`;
+        if(payments.p > 0) msg += `     Reben APP: ${payments.p.toFixed(2)} SAR%0A`;
+        if(payments.s > 0) msg += `     Petro APP: ${payments.s.toFixed(2)} SAR%0A`;
+        if(payments.k > 0) msg += `     Sayyarah APP: ${payments.k.toFixed(2)} SAR%0A`;
+        if(payments.v > 0) msg += `     Kafart Plus: ${payments.v.toFixed(2)} SAR%0A`;
+        if(payments.c > 0) msg += `     V-Wallet: ${payments.c.toFixed(2)} SAR%0A`;
+        if(payments.o > 0) msg += `     Other: ${payments.o.toFixed(2)} SAR%0A`;
+        msg += `    *CASH💸:* ${payments.cash.toFixed(2)} SAR%0A%0A`;
+
+        if (!isDayTime) {
+            msg += `*Note* - Closing reading recorded%0A     ${todayDateStr} Morning Time%0A%0A`;
+        }
+        msg += `*Thank you for being part of Reben!*`;
+        openExternal(`https://wa.me/?text=${msg}`);
+    }
+
+    function exportExcel() {
+        if(!validate()) { alert(validateMsg); return; }
+        const has91 = fuelUsed('91'), has95 = fuelUsed('95'), has98 = fuelUsed('98'), hasD = fuelUsed('D'), hasK = fuelUsed('K');
+        const station = getStationName();
+        const payments = calculatePayments();
+
+        const headerInfo = [
+            ["STATION", station],
+            ["DATE", getTopDateStr()],
+            ["SHIFT", isDayTime ? "Day" : "Night"],
+            ...(has91 ? [["91 PRICE", document.getElementById('p91').value]] : []),
+            ...(has95 ? [["95 PRICE", document.getElementById('p95').value]] : []),
+            ...(has98 ? [["98 PRICE", document.getElementById('p98').value]] : []),
+            ...(hasD ? [["D PRICE", document.getElementById('pd').value]] : []),
+            ...(hasK ? [["KEROSENE PRICE", document.getElementById('pk').value]] : []),
+            ["GRAND TOTAL", document.getElementById('grandTotal').innerText + " SAR"],
+            [],
+            ["FUEL SUMMARY"],
+            ["Fuel", "Liters", "SAR"],
+            ...(has91 ? [["91", document.getElementById('sum91').innerText, (parseFloat(document.getElementById('sum91').innerText) * parseFloat(document.getElementById('p91').value)).toFixed(2)]] : []),
+            ...(has95 ? [["95", document.getElementById('sum95').innerText, (parseFloat(document.getElementById('sum95').innerText) * parseFloat(document.getElementById('p95').value)).toFixed(2)]] : []),
+            ...(has98 ? [["98", document.getElementById('sum98').innerText, ((parseFloat(document.getElementById('sum98').innerText) || 0) * (parseFloat(document.getElementById('p98').value) || 0)).toFixed(2)]] : []),
+            ...(hasD ? [["D", document.getElementById('sumD').innerText, (parseFloat(document.getElementById('sumD').innerText) * parseFloat(document.getElementById('pd').value)).toFixed(2)]] : []),
+            ...(hasK ? [["K", document.getElementById('sumK').innerText, ((parseFloat(document.getElementById('sumK').innerText) || 0) * (parseFloat(document.getElementById('pk').value) || 0)).toFixed(2)]] : []),
+            [],
+            ["PAYMENTS"],
+            ["Type", "Amount"],
+            ...(payments.r > 0 ? [["ATM", payments.r.toFixed(2)]] : []),
+            ...(payments.p > 0 ? [["Reben APP", payments.p.toFixed(2)]] : []),
+            ...(payments.s > 0 ? [["Petro APP", payments.s.toFixed(2)]] : []),
+            ...(payments.k > 0 ? [["Sayyarah APP", payments.k.toFixed(2)]] : []),
+            ...(payments.v > 0 ? [["Kafart Plus", payments.v.toFixed(2)]] : []),
+            ...(payments.c > 0 ? [["V-Wallet", payments.c.toFixed(2)]] : []),
+            ...(payments.o > 0 ? [["Other", payments.o.toFixed(2)]] : []),
+            ["TOTAL DIGITAL PAYMENTS", payments.appsTotal.toFixed(2)],
+            ["CASH", payments.cash.toFixed(2)],
+            [],
+            ["NOZZLE DETAILS"],
+            ["NOZZLE", "FUEL", "INITIAL", "FINAL", "LITERS"]
+        ];
+
+        const nozzleData = [];
+        document.querySelectorAll('.nozzle-card').forEach(row => {
+            const id = row.id.split('-')[1];
+            nozzleData.push([
+                document.getElementById(`name-${id}`).value,
+                document.getElementById(`type-${id}`).value,
+                parseFloat(document.getElementById(`i${id}`).value) || 0,
+                parseFloat(document.getElementById(`f${id}`).value) || 0,
+                Math.max(0, (parseFloat(document.getElementById(`f${id}`).value) || 0) - (parseFloat(document.getElementById(`i${id}`).value) || 0)).toFixed(2)
+            ]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet([...headerInfo, ...nozzleData]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Report");
+        saveXlsxFile(wb, `${station}_Report.xlsx`);
+    }
+
+    // ==========================================
+    // REPORT FINGERPRINT, TOKEN & REPORT LOG QUEUE
+    // (the fingerprint code is identical in Code.gs - keep both in sync)
+    // ==========================================
+    function cleanText(v, max) {
+        return String(v === undefined || v === null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
+    }
+    function fpNum(x) { return (Number(x) || 0).toFixed(2); }
+
+    // 8-character fingerprint of the whole report: station, date, shift, prices,
+    // every payment channel, totals and every nozzle reading.
+    function reportFingerprint(d) {
+        const pr = d.prices || {}, pay = d.payments || {};
+        const parts = ['V2', String(d.station || '').trim().toUpperCase(), String(d.reportDate || ''), String(d.shift || '').toUpperCase(),
+            fpNum(pr.p91), fpNum(pr.p95), fpNum(pr.p98), fpNum(pr.pd), fpNum(pr.pk),
+            fpNum(pay.r), fpNum(pay.p), fpNum(pay.s), fpNum(pay.k), fpNum(pay.v), fpNum(pay.c), fpNum(pay.o),
+            fpNum(d.total), fpNum(d.cash), fpNum(d.totalLiters)];
+        (d.nozzles || []).forEach(z => {
+            parts.push(String(z.name || '').trim() + ':' + String(z.type || '') + ':' + fpNum(z.init) + ':' + fpNum(z.final));
+        });
+        const src = parts.join('|');
+        let h = 0x811c9dc5;
+        for (let i = 0; i < src.length; i++) {
+            h ^= src.charCodeAt(i);
+            h = Math.imul(h, 0x01000193) >>> 0;
+        }
+        return h.toString(16).toUpperCase().padStart(8, '0');
+    }
+
+    function buildReportId(d, checksum) {
+        const st = String(d.station || '').trim().toUpperCase();
+        const short = (st.split(/[—–-]/)[0] || st).replace(/[^A-Z0-9]/g, '') || st.replace(/[^A-Z0-9]/g, '') || 'STATION';
+        const dateCompact = String(d.reportDate || '').replace(/[\s-]+/g, '').toUpperCase();
+        return `${short}-${dateCompact}-${String(d.shift || '').toUpperCase()}-${checksum}`;
+    }
+
+    // Random, unguessable link code for the QR (one per PDF)
+    function makeReportToken() {
+        const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 32 symbols, no look-alikes (0/O, 1/I)
+        const bytes = new Uint8Array(16);
+        try { (window.crypto || window.msCrypto).getRandomValues(bytes); }
+        catch (e) { for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256); }
+        let t = '';
+        for (let i = 0; i < bytes.length; i++) t += abc[bytes[i] % abc.length];
+        return t;
+    }
+
+    function reportApiReady() {
+        return /^https:\/\/script\.google\.com\/macros\/s\/[^\s?#]+\/exec$/.test(REPORT_API_URL);
+    }
+
+    let appToastTimer = null;
+    function showAppToast(msg, kind, ms) {
+        let el = document.getElementById('appToast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'appToast';
+            document.body.appendChild(el);
+        }
+        el.textContent = msg;
+        el.className = 'app-toast show ' + (kind || '');
+        const footer = document.querySelector('.footer');
+        el.style.bottom = ((footer ? footer.offsetHeight : 80) + 12) + 'px';
+        clearTimeout(appToastTimer);
+        if (ms !== 0) appToastTimer = setTimeout(() => el.classList.remove('show'), ms || 3500);
+    }
+
+    function getReportQueue() {
+        try { return JSON.parse(localStorage.getItem(REPORT_QUEUE_KEY)) || []; } catch (e) { return []; }
+    }
+    function setReportQueue(q) {
+        try { localStorage.setItem(REPORT_QUEUE_KEY, JSON.stringify(q.slice(-60))); } catch (e) {}
+    }
+
+    async function postReport(payload) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 25000);
+        try {
+            const res = await fetch(REPORT_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload),
+                redirect: 'follow',
+                signal: ctrl.signal
+            });
+            return await res.json();
+        } finally { clearTimeout(timer); }
+    }
+
+    function describeReportError(e, res) {
+        if (res && res.error) return res.error;
+        const m = e && e.message ? e.message : String(e);
+        if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'cannot reach the server';
+        if (/Unexpected token|JSON|not valid/i.test(m)) return 'the server did not answer correctly - check the deployment (Anyone, latest version)';
+        if (/abort/i.test(m)) return 'the server took too long';
+        return m;
+    }
+
+    // Sends reports in the background. If there is no signal the report waits in
+    // a queue on the phone and is sent automatically later (safe to repeat).
+    let reportFlushing = false;
+    async function flushReportQueue() {
+        if (reportFlushing || !reportApiReady()) return;
+        let queue = getReportQueue();
+        if (!queue.length) return;
+        if (!navigator.onLine) { showAppToast('⏳ No internet. The report will be sent automatically.', 'warn', 5000); return; }
+        reportFlushing = true;
+        try {
+            const remaining = [];
+            let lastOk = null, rejected = null, lastErr = '';
+            for (const item of queue) {
+                let res = null;
+                try {
+                    res = await postReport(item.payload);
+                    if (res && res.ok) lastOk = res;
+                    else if (res && res.permanent) rejected = res.error || 'rejected';
+                    else throw new Error('retry');
+                } catch (e) {
+                    lastErr = describeReportError(e, res);
+                    console.warn('Report log: send failed -', lastErr);
+                    item.tries = (item.tries || 0) + 1;
+                    if (item.tries < 12) remaining.push(item);
+                }
+            }
+            setReportQueue(remaining);
+            if (rejected) showAppToast('⚠ Report was not accepted by the log: ' + rejected, 'warn', 7000);
+            else if (remaining.length) showAppToast('⏳ Report not sent yet: ' + lastErr + '. Retrying automatically.', 'warn', 9000);
+            else if (lastOk) showAppToast('✓ Report saved to the log' + (lastOk.version ? ' · Version ' + lastOk.version : ''), 'ok', 3500);
+        } finally { reportFlushing = false; }
+    }
+
+    function queueReport(payload) {
+        const q = getReportQueue();
+        q.push({ payload: payload, tries: 0 });
+        setReportQueue(q);
+        flushReportQueue();
+    }
+
+    window.addEventListener('online', function () { flushReportQueue(); });
+    window.addEventListener('load', function () { setTimeout(flushReportQueue, 1500); });
+
+    // ==========================================
+    // SAMPLE 4 — AMBER & CHARCOAL AUDIT (A4 PORTRAIT REPORT)
+    // ==========================================
+    async function exportPDF(mode) {
+        if (!validate()) { alert(validateMsg); return; }
+
+        const has91 = fuelUsed('91'), has95 = fuelUsed('95'), has98 = fuelUsed('98'), hasD = fuelUsed('D'), hasK = fuelUsed('K');
+        const { jsPDF } = window.jspdf;
+
+        // A4 Portrait: 210mm x 297mm | 18mm left/right margins (174mm printable width)
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+        const pageWidth = doc.internal.pageSize.getWidth();   // 210mm
+        const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
+        const margin = 18;
+        const contentWidth = pageWidth - (margin * 2);        // 174mm
+
+        // Amber & Charcoal palette
+        const C_CHAR      = [38, 38, 38];     // Charcoal (title, table headers, rules)
+        const C_INK       = [30, 41, 59];     // Body text
+        const C_SLATE     = [71, 85, 105];    // Secondary text
+        const C_MUTED     = [100, 116, 139];  // Muted labels
+        const C_AMBER     = [245, 158, 11];   // Amber accent bars
+        const C_AMBER_TXT = [217, 119, 6];    // Shift label (orange)
+        const C_KPI_VAL   = [21, 83, 45];     // KPI values (deep green)
+        const C_NET       = [180, 83, 9];     // Net cash value
+        const C_KPI_BG    = [240, 250, 244];  // KPI card fill (very light green)
+        const C_KPI_LINE  = [187, 229, 202];  // KPI card border (soft green)
+        const C_NOTE_LINE = [253, 230, 138];  // Note box border (amber)
+        const C_NOTE_BG   = [254, 243, 199];  // Note box fill
+        const C_NOTE_TXT  = [146, 64, 14];    // Note box text
+        const C_BAR_BG    = [248, 250, 252];  // Unit-rate bar fill
+        const C_BAR_LINE  = [226, 232, 240];  // Unit-rate bar border
+        const C_ROW_LINE  = [229, 231, 235];  // Table row hairline
+        const C_DASH      = [191, 205, 224];  // Signature dashed line
+
+        const fmt2 = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const station = getStationName();
+        const shiftShort = isDayTime ? "DAY SHIFT (6 AM - 6 PM)" : "NIGHT SHIFT (6 PM - 6 AM)";
+        const time = new Date().toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' });
+        const payments = calculatePayments();
+        const todayDateStr = formatDate(new Date());
+        const reportDateStr = getTopDateStr();
+
+        const logoInfo = await loadCompanyLogo();
+
+        // ------------------------------------------
+        // REPORT ID + VERIFICATION QR
+        // ------------------------------------------
+        const shiftCode = isDayTime ? 'DAY' : 'NIGHT';
+        const cleanStation = cleanText(station, 60);
+
+        // Everything that goes into the fingerprint is read once from the screen
+        const fpPrices = {
+            p91: parseFloat(document.getElementById('p91').value) || 0,
+            p95: parseFloat(document.getElementById('p95').value) || 0,
+            p98: parseFloat(document.getElementById('p98').value) || 0,
+            pd:  parseFloat(document.getElementById('pd').value)  || 0,
+            pk:  parseFloat(document.getElementById('pk').value)  || 0
+        };
+        const fpNozzles = [];
+        const openingEdits = [];
+        document.querySelectorAll('.nozzle-card').forEach((row, idx) => {
+            const nid = row.id.split('-')[1];
+            const nName = cleanText(document.getElementById(`name-${nid}`).value, 30) || ('Nozzle ' + (idx + 1));
+            const nInit = parseFloat(document.getElementById(`i${nid}`).value) || 0;
+            const nFinal = parseFloat(document.getElementById(`f${nid}`).value) || 0;
+            fpNozzles.push({ name: nName, type: document.getElementById(`type-${nid}`).value, init: nInit, final: nFinal });
+            const orig = row.dataset.initOrig;
+            if (orig !== undefined && orig !== '' && (parseFloat(orig) || 0) !== nInit) {
+                openingEdits.push({ nozzle: nName, from: parseFloat(orig) || 0, to: nInit });
+            }
+        });
+        const litersForId = ['sum91', 'sum95', 'sum98', 'sumD', 'sumK']
+            .reduce((a, sid) => a + (parseFloat(document.getElementById(sid).innerText) || 0), 0);
+        const reportData = {
+            station: cleanStation, reportDate: cleanText(reportDateStr, 30), shift: shiftCode,
+            prices: fpPrices,
+            payments: { r: payments.r, p: payments.p, s: payments.s, k: payments.k, v: payments.v, c: payments.c, o: payments.o, appsTotal: payments.appsTotal },
+            total: payments.total, cash: payments.cash, totalLiters: litersForId,
+            nozzles: fpNozzles
+        };
+        const checkCode = reportFingerprint(reportData);            // 8 characters
+        const reportId = buildReportId(reportData, checkCode);
+        const reportToken = makeReportToken();
+        const verifyUrl = reportApiReady() ? `${REPORT_API_URL}?t=${reportToken}` : '';   // opens when the QR/footer is tapped in a soft copy
+        const verifyCode = reportToken.replace(/(.{4})(?=.)/g, '$1-');                  // printed as ABCD-EFGH-JKLM-NPQR
+
+        // QR holds ONLY the 16-character verification code (capitals + digits), so it is a tiny 21x21 code
+        // with big squares that scans easily even when small or printed on a basic printer.
+        // QR now holds ONLY the 8-character checksum as plain text (e.g. DB9F2516), so Google Lens shows it directly.
+        const qrText = 'HTTPS://' + checkCode + '.R';   // 17 capital letters/digits = smallest 21x21 code; .r is not a real domain ending, so nobody can register it
+        const qrSize = 15;   // 15 mm
+        const qrX = pageWidth - margin - qrSize;
+        const qrY = 13.5;   // moved down so the whole code + white border sits inside the header
+        let qrObj = null;
+        try {
+            if (typeof qrcode === 'function') {
+                qrObj = qrcode(0, 'M');   // 21x21 code; 17 characters leaves room for stronger error-correction
+                qrObj.addData(qrText, 'Alphanumeric');
+                qrObj.make();
+            }
+        } catch (e) { qrObj = null; }   // if the QR library is unavailable the report still prints normally
+
+        doc.setProperties({
+            title: `${station} - Shift Audit Report - ${reportDateStr}`,
+            subject: `Official Station Shift Audit Record - ${reportId}`,
+            author: 'Reben Petroleum',
+            creator: 'Reben Station Reports'
+        });
+
+        // Section title with amber vertical accent
+        function drawSectionHeader(title, yPos) {
+            doc.setFillColor(...C_AMBER);
+            doc.rect(margin, yPos - 3.2, 1.1, 4, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10.5);
+            doc.setTextColor(...C_CHAR);
+            doc.text(title, margin + 3, yPos);
+        }
+
+        // Make header/footer cells follow the column alignment (right-aligned numbers)
+        let colAligns = [];
+        let gradeCol = -1;   // which column holds the fuel grade (color-coded), -1 = none
+        const GRADE_COLORS = {
+            '91': [5, 150, 105],    // Green
+            '95': [220, 38, 38],    // Red
+            '98': [124, 58, 237],   // Purple
+            'D':  [180, 83, 9],     // Amber / Brown
+            'K':  [2, 132, 199]     // Blue
+        };
+        function gradeKey(t) {
+            t = String(t).trim();
+            if (t === '91' || /\b91\b/.test(t)) return '91';
+            if (t === '95' || /\b95\b/.test(t)) return '95';
+            if (t === '98' || /\b98\b/.test(t)) return '98';
+            if (t === 'D' || /\(D\)/.test(t)) return 'D';
+            if (t === 'K' || /\(K\)/.test(t)) return 'K';
+            return null;
+        }
+        function alignHeadFoot(data) {
+            if (data.section === 'head' || data.section === 'foot') {
+                const al = colAligns[data.column.index];
+                if (al) data.cell.styles.halign = al;
+            }
+            if (data.section === 'head') {
+                data.cell.text = data.cell.text.map(t => String(t).toUpperCase());
+            }
+            if (data.section === 'body' && data.column.index === gradeCol) {
+                const gk = gradeKey(data.cell.raw);
+                if (gk && GRADE_COLORS[gk]) {
+                    data.cell.styles.textColor = GRADE_COLORS[gk];
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            }
+        }
+
+        // Shared table look: charcoal header, white body, hairline row separators
+        const baseTable = {
+            margin: { left: margin, right: margin, top: 18 },
+            theme: 'plain',
+            styles: { font: 'helvetica', fontSize: 9.2, cellPadding: { top: 1.3, bottom: 1.3, left: 2, right: 2 }, textColor: C_INK, lineWidth: 0, valign: 'middle' },
+            headStyles: { fillColor: C_CHAR, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.4, cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 } },
+            footStyles: { fillColor: false, textColor: C_CHAR, fontStyle: 'bold' },
+            didParseCell: function (data) { alignHeadFoot(data); },
+            didDrawCell: function (data) {
+                const cx = data.cell.x, cy = data.cell.y, cw = data.cell.width, ch = data.cell.height;
+                if (data.section === 'body' || data.section === 'foot') {
+                    // Clean light hairline under every row (totals row included)
+                    doc.setDrawColor(...C_ROW_LINE);
+                    doc.setLineWidth(0.2);
+                    doc.line(cx, cy + ch, cx + cw, cy + ch);
+                }
+            }
+        };
+
+        // ------------------------------------------
+        // 1. HEADER (logo + station left, date/shift/generated right)
+        // ------------------------------------------
+        let titleX = margin;
+        const logoTopY = 14.5;
+        const maxLogoH = 13;
+        const maxLogoW = 30;
+
+        if (logoInfo && logoInfo.dataUrl) {
+            let drawW = maxLogoH * logoInfo.aspectRatio;
+            let drawH = maxLogoH;
+            if (drawW > maxLogoW) {
+                drawW = maxLogoW;
+                drawH = maxLogoW / logoInfo.aspectRatio;
+            }
+            const offsetY = logoTopY + (maxLogoH - drawH) / 2;
+            doc.addImage(logoInfo.dataUrl, 'PNG', margin, offsetY, drawW, drawH, 'reben-logo', 'FAST');
+            titleX = margin + drawW + 4;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        // Station name shrinks a little if it is long, so it never runs into the date block or the QR
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.6);
+        const genWidth = doc.getTextWidth(`Generated: ${todayDateStr}, ${time}`);
+        const titleRight = (qrObj ? (pageWidth - margin - qrSize - 4) : (pageWidth - margin)) - genWidth - 6;
+        let titleSize = 16;
+        const titleMaxW = titleRight - titleX;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(titleSize);
+        while (titleSize > 11 && doc.getTextWidth(station) > titleMaxW) { titleSize -= 0.5; doc.setFontSize(titleSize); }
+        let titleLines = [station];
+        if (doc.getTextWidth(station) > titleMaxW) {          // still too long: use two lines
+            titleLines = doc.splitTextToSize(station, titleMaxW);
+            if (titleLines.length > 2) {
+                titleLines = titleLines.slice(0, 2);
+                let last = titleLines[1];
+                while (last.length > 1 && doc.getTextWidth(last + '...') > titleMaxW) last = last.slice(0, -1);
+                titleLines[1] = last + '...';
+            }
+        }
+        doc.setTextColor(...C_CHAR);
+        if (titleLines.length === 1) {
+            doc.text(titleLines[0], titleX, 22.8);
+        } else {
+            doc.text(titleLines[0], titleX, 20.2);
+            doc.text(titleLines[1], titleX, 24.6);
+        }
+        const subtitleY = titleLines.length === 1 ? 27.2 : 28.6;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.2);
+        doc.setTextColor(...C_MUTED);
+        doc.text("STATION SHIFT REPORT", titleX, subtitleY);
+
+        // Right block: "Date:" (bold) + value (regular)
+        const rightX = qrObj ? (pageWidth - margin - qrSize - 4) : (pageWidth - margin);
+        if (qrObj) {
+            const qn = qrObj.getModuleCount();
+            const qm = qrSize / qn;
+            doc.setFillColor(255, 255, 255);                       // clear white border around the code
+            doc.rect(qrX - 3, qrY - 3, qrSize + 6, qrSize + 6, 'F');
+            doc.setFillColor(0, 0, 0);                             // pure black for the best contrast
+            for (let r = 0; r < qn; r++) {
+                for (let c = 0; c < qn; c++) {
+                    if (qrObj.isDark(r, c)) doc.rect(qrX + c * qm, qrY + r * qm, qm + 0.03, qm + 0.03, 'F');
+                }
+            }
+            if (verifyUrl) doc.link(qrX - 3, qrY - 3, qrSize + 6, qrSize + 6, { url: verifyUrl });   // soft copy: tap the QR to open the verification page
+        }
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        const dateValW = doc.getTextWidth(reportDateStr);
+        doc.setTextColor(...C_SLATE);
+        doc.text(reportDateStr, rightX, 18.3, { align: 'right' });
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...C_CHAR);
+        doc.text("Date: ", rightX - dateValW, 18.3, { align: 'right' });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(...C_AMBER_TXT);
+        doc.text(shiftShort, rightX, 22.8, { align: 'right' });
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.6);
+        doc.setTextColor(...C_SLATE);
+        doc.text(`Generated: ${todayDateStr}, ${time}`, rightX, 27.2, { align: 'right' });
+
+        // Thick charcoal rule
+        doc.setDrawColor(...C_CHAR);
+        doc.setLineWidth(0.5);
+        doc.line(margin, 31, pageWidth - margin, 31);
+
+        // ------------------------------------------
+        // 2. UNIT RATES BAR
+        // ------------------------------------------
+        const barY = 35.3, barH = 7.4;
+        doc.setFillColor(...C_BAR_BG);
+        doc.setDrawColor(...C_BAR_LINE);
+        doc.setLineWidth(0.25);
+        doc.roundedRect(margin, barY, contentWidth, barH, 1, 1, 'FD');
+
+        const rateParts = [
+            has91 ? `91: ${parseFloat(document.getElementById('p91').value).toFixed(2)}` : '',
+            has95 ? `95: ${parseFloat(document.getElementById('p95').value).toFixed(2)}` : '',
+            has98 ? `98: ${parseFloat(document.getElementById('p98').value).toFixed(2)}` : '',
+            hasD  ? `D: ${parseFloat(document.getElementById('pd').value).toFixed(2)}` : '',
+            hasK  ? `K: ${parseFloat(document.getElementById('pk').value).toFixed(2)}` : ''
+        ].filter(Boolean).join('  |  ');
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.6);
+        doc.setTextColor(...C_CHAR);
+        const rateLabel = "PRICE:";
+        doc.text(rateLabel, margin + 3, barY + 4.7);
+        const rateLabelW = doc.getTextWidth(rateLabel);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...C_SLATE);
+        doc.text(`  ${rateParts}`, margin + 3 + rateLabelW, barY + 4.7);
+
+        // ------------------------------------------
+        // 3. THREE AMBER KPI CARDS
+        // ------------------------------------------
+        const kpiY = 46.6;
+        const q91 = parseFloat(document.getElementById('sum91').innerText) || 0;
+        const q95 = parseFloat(document.getElementById('sum95').innerText) || 0;
+        const q98 = parseFloat(document.getElementById('sum98').innerText) || 0;
+        const qD  = parseFloat(document.getElementById('sumD').innerText) || 0;
+        const qK  = parseFloat(document.getElementById('sumK').innerText) || 0;
+        const totalLiters = q91 + q95 + q98 + qD + qK;
+
+        const cardGap = 2.8;
+        const cardW = (contentWidth - (cardGap * 2)) / 3;
+        const cardH = 15.5;
+
+        const kpis = [
+            { label: "Total Amount",  value: `${fmt2(payments.total)} SAR` },
+            { label: "Total Sale", value: `${fmt2(totalLiters)} L` },
+            { label: "Total Cash",   value: `${fmt2(payments.cash)} SAR` }
+        ];
+
+        kpis.forEach((kpi, idx) => {
+            const x = margin + idx * (cardW + cardGap);
+            doc.setFillColor(...C_KPI_BG);
+            doc.setDrawColor(...C_KPI_LINE);
+            doc.setLineWidth(0.45);
+            doc.roundedRect(x, kpiY, cardW, cardH, 1.6, 1.6, 'FD');
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.2);
+            doc.setTextColor(...C_MUTED);
+            doc.text(kpi.label, x + 3.2, kpiY + 5.2);
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(13.5);
+            doc.setTextColor(...C_KPI_VAL);
+            doc.text(kpi.value, x + 3.2, kpiY + 12);
+        });
+
+        // ------------------------------------------
+        // 4. SECTION 1: FUEL SALES SUMMARY
+        // ------------------------------------------
+        let currentY = kpiY + cardH + 7;
+        drawSectionHeader("FUEL SALES", currentY);
+
+        const fuelBody = [];
+        if (has91) fuelBody.push(["Gasoline 91", `${parseFloat(document.getElementById('p91').value).toFixed(2)}`, `${fmt2(q91)}`, fmt2(q91 * (parseFloat(document.getElementById('p91').value) || 0))]);
+        if (has95) fuelBody.push(["Gasoline 95", `${parseFloat(document.getElementById('p95').value).toFixed(2)}`, `${fmt2(q95)}`, fmt2(q95 * (parseFloat(document.getElementById('p95').value) || 0))]);
+        if (has98) fuelBody.push(["Gasoline 98", `${parseFloat(document.getElementById('p98').value).toFixed(2)}`, `${fmt2(q98)}`, fmt2(q98 * (parseFloat(document.getElementById('p98').value) || 0))]);
+        if (hasD)  fuelBody.push(["Diesel (D)",  `${parseFloat(document.getElementById('pd').value).toFixed(2)}`,  `${fmt2(qD)}`,  fmt2(qD  * (parseFloat(document.getElementById('pd').value)  || 0))]);
+        if (hasK)  fuelBody.push(["Kerosene (K)",`${parseFloat(document.getElementById('pk').value).toFixed(2)}`,  `${fmt2(qK)}`,  fmt2(qK  * (parseFloat(document.getElementById('pk').value)  || 0))]);
+
+        colAligns = ['left', 'right', 'right', 'right'];
+        gradeCol = 0;
+        doc.autoTable({
+            ...baseTable,
+            head: [["Fuel Type", "Price", "Sale (L)", "Total Amount (SR)"]],
+            body: fuelBody,
+            foot: [["TOTAL SALES", "--", fmt2(totalLiters), fmt2(payments.total)]],
+            startY: currentY + 2.5,
+            columnStyles: {
+                0: { cellWidth: 40 },
+                1: { cellWidth: 42, halign: 'right' },
+                2: { cellWidth: 39, halign: 'right' },
+                3: { cellWidth: 53, halign: 'right' }
+            }
+        });
+
+        // ------------------------------------------
+        // 5. SECTION 2: PAYMENT & CASH RECONCILIATION (2-COLUMN PAIRED GRID)
+        // ------------------------------------------
+        currentY = doc.lastAutoTable.finalY + 7;
+        drawSectionHeader("PAYMENT", currentY);
+
+        const activeDigital = [];
+        if (payments.r > 0) activeDigital.push(["ATM / POS", fmt2(payments.r)]);
+        if (payments.p > 0) activeDigital.push(["Reben APP", fmt2(payments.p)]);
+        if (payments.s > 0) activeDigital.push(["Petro APP", fmt2(payments.s)]);
+        if (payments.k > 0) activeDigital.push(["Sayyarah APP", fmt2(payments.k)]);
+        if (payments.v > 0) activeDigital.push(["Kafart Plus", fmt2(payments.v)]);
+        if (payments.c > 0) activeDigital.push(["V-Wallet", fmt2(payments.c)]);
+        if (payments.o > 0) activeDigital.push(["Other Digital", fmt2(payments.o)]);
+
+        const pairedPayRows = [];
+        for (let i = 0; i < activeDigital.length; i += 2) {
+            const left = activeDigital[i];
+            const right = activeDigital[i + 1] || ["", ""];
+            pairedPayRows.push([left[0], left[1], right[0], right[1]]);
+        }
+        if (pairedPayRows.length === 0) {
+            pairedPayRows.push(["No Digital / App Payments", "0.00", "", ""]);
+        }
+
+        colAligns = ['left', 'right', 'left', 'right'];
+        gradeCol = -1;
+        doc.autoTable({
+            ...baseTable,
+            head: [["Type", "Amount (SR)", "Type", "Amount (SR)"]],
+            body: pairedPayRows,
+            foot: [[
+                "Total Digital / Apps",
+                fmt2(payments.appsTotal),
+                "NET CASH IN HAND",
+                fmt2(payments.cash)
+            ]],
+            startY: currentY + 2.5,
+            columnStyles: {
+                0: { cellWidth: 50 },
+                1: { cellWidth: 36, halign: 'right' },
+                2: { cellWidth: 50 },
+                3: { cellWidth: 38, halign: 'right' }
+            },
+            didParseCell: function (data) {
+                alignHeadFoot(data);
+                if (data.section === 'foot' && data.column.index === 3) {
+                    data.cell.styles.textColor = C_NET;
+                }
+            }
+        });
+
+        // ------------------------------------------
+        // 6. SECTION 3: NOZZLE METER READINGS LOG
+        // ------------------------------------------
+        currentY = doc.lastAutoTable.finalY + 7;
+        drawSectionHeader("NOZZLE READINGS", currentY);
+
+        const nozzleRows = [];
+        document.querySelectorAll('.nozzle-card').forEach(row => {
+            const id = row.id.split('-')[1];
+            const type = document.getElementById(`type-${id}`).value;
+            const initVal = parseFloat(document.getElementById(`i${id}`).value) || 0;
+            const finalVal = parseFloat(document.getElementById(`f${id}`).value) || 0;
+            const liters = Math.max(0, finalVal - initVal);
+            const priceMap = {
+                '91': parseFloat(document.getElementById('p91').value) || 0,
+                '95': parseFloat(document.getElementById('p95').value) || 0,
+                '98': parseFloat(document.getElementById('p98').value) || 0,
+                'D':  parseFloat(document.getElementById('pd').value)  || 0,
+                'K':  parseFloat(document.getElementById('pk').value)  || 0
+            };
+            const rowAmt = liters * (priceMap[type] || 0);
+
+            nozzleRows.push([
+                document.getElementById(`name-${id}`).value,
+                type,
+                fmt2(initVal),
+                fmt2(finalVal),
+                fmt2(liters),
+                fmt2(rowAmt)
+            ]);
+        });
+
+        colAligns = ['left', 'left', 'right', 'right', 'right', 'right'];
+        gradeCol = 1;
+        doc.autoTable({
+            ...baseTable,
+            head: [["Nozzle", "Type", "Start", "End", "Sale (L)", "Amount (SR)"]],
+            body: nozzleRows,
+            startY: currentY + 2.5,
+            margin: { left: margin, right: margin, top: 18, bottom: 32 },
+            alternateRowStyles: { fillColor: [250, 250, 249] },
+            columnStyles: {
+                0: { cellWidth: 22 },
+                1: { cellWidth: 22 },
+                2: { cellWidth: 32, halign: 'right' },
+                3: { cellWidth: 36, halign: 'right' },
+                4: { cellWidth: 33, halign: 'right' },
+                5: { cellWidth: 29, halign: 'right' }
+            }
+        });
+
+        // ------------------------------------------
+        // 7. NIGHT SHIFT NOTE & DASHED SIGNATURE LINES
+        // ------------------------------------------
+        let afterY = doc.lastAutoTable.finalY + 3.8;
+        if (afterY > pageHeight - 46) {
+            doc.addPage();
+            afterY = 20;
+        }
+
+        if (!isDayTime) {
+            doc.setFillColor(...C_NOTE_BG);
+            doc.setDrawColor(...C_NOTE_LINE);
+            doc.setLineWidth(0.25);
+            doc.roundedRect(margin, afterY, contentWidth, 8, 1.2, 1.2, 'FD');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.6);
+            doc.setTextColor(...C_NOTE_TXT);
+            doc.text(`Note: Night shift closing reading recorded on ${todayDateStr} (Morning Time).`, margin + 3.2, afterY + 5.1);
+            afterY += 8;
+        }
+
+        const sigGap = 10;
+        const sigLineW = (contentWidth - sigGap) / 2;   // 82mm each
+        const sigY = afterY + 8.3;
+
+        doc.setDrawColor(...C_DASH);
+        doc.setLineWidth(0.3);
+        doc.setLineDashPattern([1.1, 1.1], 0);
+        doc.line(margin, sigY, margin + sigLineW, sigY);
+        const rightSigX = margin + sigLineW + sigGap;
+        doc.line(rightSigX, sigY, rightSigX + sigLineW, sigY);
+        doc.setLineDashPattern([], 0);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.6);
+        doc.setTextColor(...C_SLATE);
+        doc.text("Shift Attendant / Cashier", margin, sigY + 4);
+        doc.text("Station Supervisor / Manager", rightSigX, sigY + 4);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...C_MUTED);
+        doc.text("Name  /  Signature  /  Date", margin, sigY + 8.2);
+        doc.text("Name  /  Signature  /  Date", rightSigX, sigY + 8.2);
+
+        // ------------------------------------------
+        // 8. PAGE FOOTER
+        // ------------------------------------------
+        const totalPages = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+
+            if (i > 1) {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(...C_CHAR);
+                doc.text(`${station}  -  SHIFT AUDIT REPORT (continued)`, margin, 11);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(...C_MUTED);
+                doc.text(reportDateStr, pageWidth - margin, 11, { align: 'right' });
+                doc.setDrawColor(...C_CHAR);
+                doc.setLineWidth(0.4);
+                doc.line(margin, 13.5, pageWidth - margin, 13.5);
+            }
+
+            doc.setDrawColor(...C_ROW_LINE);
+            doc.setLineWidth(0.2);
+            doc.line(margin, pageHeight - 19, pageWidth - margin, pageHeight - 19);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.8);
+            doc.setTextColor(...C_MUTED);
+            doc.text("Thank you for being part of Reben!  •  Official Station Shift Audit Record", margin, pageHeight - 14);
+            doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 14, { align: 'right' });
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.2);
+            const idLabel = "Report ID: ";
+            doc.text(idLabel, margin, pageHeight - 9.8);
+            const idLabelW = doc.getTextWidth(idLabel);
+            doc.setFont('helvetica', 'normal');
+            doc.text(reportId + "   •   Checksum: " + checkCode + (qrObj ? "   •   Designed By- Mozahid" : ""), margin + idLabelW, pageHeight - 9.8);
+            if (verifyUrl) doc.link(margin, pageHeight - 13, contentWidth, 4.6, { url: verifyUrl });   // footer line is tappable too
+        }
+
+        const safeFileName = `${station.replace(/[^A-Z0-9_-]/gi, '_')}_${reportDateStr.replace(/\s+/g, '')}_Report.pdf`;
+        // Log this report (and every version of it) in the Google Sheet - runs in the background
+        if (!reportApiReady()) {
+            console.info('Report log is OFF: REPORT_API_URL is empty or not a script.google.com ... /exec link.');
+            showAppToast('ℹ Report log is off (REPORT_API_URL not set). The PDF was still created.', 'warn', 6000);
+        }
+        if (reportApiReady()) {
+            queueReport({
+                token: reportToken, reportId: reportId, checksum: checkCode,
+                station: reportData.station, reportDate: reportData.reportDate, shift: shiftCode,
+                generatedAt: new Date().toISOString(),
+                prices: fpPrices, payments: reportData.payments,
+                total: reportData.total, cash: reportData.cash, totalLiters: reportData.totalLiters,
+                nozzles: fpNozzles, openingEdits: openingEdits,
+                mode: mode === 'share' ? 'share' : 'save'
+            });
+        }
+
+        if (mode === 'share') {
+            await sharePdfDoc(doc, safeFileName, station, reportId);
+        } else {
+            await saveDocFile(doc, safeFileName);
+        }
+    }
+
+    // Share the PDF through the phone's share menu (WhatsApp, Telegram, Email, ...)
+    async function sharePdfDoc(doc, fileName, station, reportId) {
+        if (IS_ANDROID_APP) {
+            try {
+                const b64 = await blobToBase64(doc.output('blob'));
+                window.AndroidBridge.shareFile(b64, fileName, 'application/pdf',
+                    `${station} shift report\nReport ID: ${reportId}`);
+            } catch (err) {
+                alert('Could not share the PDF: ' + (err && err.message ? err.message : err));
+            }
+            return;
+        }
+        try {
+            const blob = doc.output('blob');
+            const file = new File([blob], fileName, { type: 'application/pdf' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: `${station} - Shift Report`,
+                    text: `${station} shift report\nReport ID: ${reportId}`
+                });
+            } else {
+                doc.save(fileName);
+                alert('Sharing files is not supported on this device or browser. The PDF was downloaded instead.');
+            }
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;   // user closed the share menu
+            doc.save(fileName);
+            alert('Could not open the share menu. The PDF was downloaded instead.');
+        }
+    }
+
+    function sharePDF() { return exportPDF('share'); }
+
+    function saveMem() {
+        const data = {
+            sn: document.getElementById('sn').value,
+            p91: document.getElementById('p91').value,
+            p95: document.getElementById('p95').value,
+            p98: document.getElementById('p98').value,
+            pd: document.getElementById('pd').value,
+            pk: document.getElementById('pk').value,
+            day: isDayTime,
+            savedAt: Date.now(),
+            appsVisible: document.getElementById('appsMainCard').classList.contains('visible'),
+            appReben: document.getElementById('appReben').value,
+            appPetro: document.getElementById('appPetro').value,
+            appSayyara: document.getElementById('appSayyara').value,
+            appKafarat: document.getElementById('appKafarat').value,
+            appVwallet: document.getElementById('appVwallet').value,
+            appCar: document.getElementById('appCar').value,
+            appOther: document.getElementById('appOther').value,
+            nozzles: []
+        };
+        document.querySelectorAll('.nozzle-card').forEach(row => {
+            const id = row.id.split('-')[1];
+            data.nozzles.push({
+                name: document.getElementById(`name-${id}`).value,
+                type: document.getElementById(`type-${id}`).value,
+                init: document.getElementById(`i${id}`).value,
+                final: document.getElementById(`f${id}`).value,
+                initOrig: row.dataset.initOrig || ''
+            });
+        });
+        localStorage.setItem('reben_v3_premium', JSON.stringify(data));
+    }
+
+    function loadMem() {
+        const stored = localStorage.getItem('reben_v3_premium');
+        if(stored) {
+            const data = JSON.parse(stored);
+            document.getElementById('sn').value = data.sn || ""; fitStationName();
+            document.getElementById('p91').value = data.p91 || "";
+            document.getElementById('p95').value = data.p95 || "";
+            document.getElementById('p98').value = data.p98 || "";
+            document.getElementById('pd').value = data.pd || "";
+            document.getElementById('pk').value = data.pk || "";
+            document.getElementById('appReben').value = data.appReben || "0";
+            document.getElementById('appPetro').value = data.appPetro || "0";
+            document.getElementById('appSayyara').value = data.appSayyara || "0";
+            document.getElementById('appKafarat').value = data.appKafarat || "0";
+            document.getElementById('appVwallet').value = data.appVwallet || "0";
+            document.getElementById('appCar').value = data.appCar || "0";
+            document.getElementById('appOther').value = data.appOther || "0";
+
+            if(data.appsVisible) {
+                document.getElementById('appsMainCard').classList.add('visible');
+                document.getElementById('appsToggleBtn').innerHTML = '<i class="fa-solid fa-minus"></i> APPS';
+            }
+
+            isDayTime = data.day !== undefined ? data.day : true;
+
+            if (isDayTime) {
+                document.body.classList.remove('night-mode');
+                document.getElementById('shift-icon').innerHTML = '<i class="fa-regular fa-sun"></i>';
+                document.getElementById('shift-text').innerText = "DAY SHIFT (6AM-6PM)";
+            } else {
+                document.body.classList.add('night-mode');
+                document.getElementById('shift-icon').innerHTML = '<i class="fa-regular fa-moon"></i>';
+                document.getElementById('shift-text').innerText = "NIGHT SHIFT (6PM-6AM)";
+            }
+            data.nozzles.forEach(n => addNewNozzle(n));
+            doMath();
+            calculatePayments();
+
+            try {
+                const hasFinal = (data.nozzles || []).some(n => String(n.final || '').trim() !== '');
+                if (data.savedAt && hasFinal && shiftPeriod(new Date()) !== shiftPeriod(new Date(data.savedAt))) {
+                    setTimeout(() => {
+                        if (confirm("A new shift has started since your last entry.\n\nMove the FINAL readings to INITIAL for the new shift now?")) {
+                            rotateShift(true);
+                        }
+                    }, 500);
+                }
+            } catch (e) {}
+        } else {
+            addNewNozzle();
+            document.getElementById('shift-text').innerText = "DAY SHIFT (6AM-6PM)";
+            document.getElementById('appReben').value = "0";
+            document.getElementById('appPetro').value = "0";
+            document.getElementById('appSayyara').value = "0";
+            document.getElementById('appKafarat').value = "0";
+            document.getElementById('appVwallet').value = "0";
+            document.getElementById('appCar').value = "0";
+            document.getElementById('appOther').value = "0";
+        }
+    }
+
+    function updateRowColor(id) {
+        const type = document.getElementById(`type-${id}`).value;
+        document.getElementById(`card-${id}`).className = `nozzle-card card-${type.toLowerCase()}`;
+        document.getElementById(`type-${id}`).className = `fuel-badge ft-${type.toLowerCase()}`;
+        doMath();
+    }
+
+    window.addEventListener('online', function() {
+        document.getElementById('syncStatus').innerText = '✓ Saved';
+    });
+
+    window.addEventListener('offline', function() {
+        document.getElementById('syncStatus').innerText = '📴 Offline';
+        document.getElementById('syncStatus').classList.remove('success');
+    });
+
+    (function mobileLayout() {
+        const footer = document.querySelector('.footer');
+        function fitPadding() {
+            document.body.style.paddingBottom = (footer.offsetHeight + 16) + 'px';
+        }
+        if ('ResizeObserver' in window) new ResizeObserver(fitPadding).observe(footer);
+        window.addEventListener('resize', fitPadding);
+        window.addEventListener('load', fitPadding);
+        fitPadding();
+
+        if (window.visualViewport) {
+            let fullH = window.visualViewport.height;
+            window.addEventListener('orientationchange', () => { setTimeout(() => { fullH = window.visualViewport.height; }, 400); });
+            window.visualViewport.addEventListener('resize', () => {
+                const h = window.visualViewport.height;
+                if (h > fullH) fullH = h;
+                const typing = /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '');
+                footer.classList.toggle('kb-hidden', typing && h < fullH * 0.75);
+            });
+        }
+    })();
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+        if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
+    }
+
+    window.onload = loadMem;
+</script>
+
+<script>
+    (function () {
+        const KEY = 'reben_tutorial_seen_v1';
+        const q  = (sel, root) => (root || document).querySelector(sel);
+        const k  = (root, name) => root.querySelector('[data-k="' + name + '"]');
+        let timers = [];
+        let isOpen = false;
+
+        const later = (fn, ms) => { timers.push(setTimeout(fn, ms)); };
+        const on  = (el, c) => el.classList.add(c);
+        const off = (el, c) => el.classList.remove(c);
+
+        // types text into an element, one character at a time
+        function typeInto(el, text, speed, startAt) {
+            for (let i = 1; i <= text.length; i++) {
+                later(() => { el.textContent = text.slice(0, i); }, startAt + i * speed);
+            }
+        }
+
+        // Each demo resets itself, schedules its steps, and returns its total length (ms)
+        const demos = {
+            1(d) {
+                const row = q('.mini-name', d), nm = k(d, 'name');
+                const keys = ['p91', 'p95', 'pd'], vals = ['2.18', '2.33', '1.66'];
+                nm.textContent = ''; off(row, 'hl');
+                keys.forEach(key => { const s = k(d, key); s.textContent = '0.00'; on(s, 'empty'); off(s.parentElement, 'hl'); });
+
+                later(() => on(row, 'hl'), 300);
+                typeInto(nm, 'RIYADH 12', 90, 500);
+                later(() => off(row, 'hl'), 1600);
+                keys.forEach((key, i) => {
+                    const s = k(d, key), pill = s.parentElement, t = 1800 + i * 1100;
+                    later(() => on(pill, 'hl'), t);
+                    later(() => { s.textContent = vals[i]; off(s, 'empty'); }, t + 500);
+                    later(() => off(pill, 'hl'), t + 1000);
+                });
+                return 6600;
+            },
+            2(d) {
+                const ini = k(d, 'ini'), fin = k(d, 'fin');
+                const iniBox = k(d, 'iniBox'), finBox = k(d, 'finBox'), cam = k(d, 'cam');
+                const scan = k(d, 'scan'), sales = k(d, 'sales');
+                ini.textContent = ''; fin.textContent = '';
+                [iniBox, finBox, cam].forEach(e => off(e, 'hl'));
+                off(scan, 'on'); off(sales, 'on');
+
+                later(() => on(iniBox, 'hl'), 300);
+                typeInto(ini, '125430.5', 110, 500);
+                later(() => off(iniBox, 'hl'), 1900);
+                later(() => on(cam, 'hl'), 2100);
+                later(() => on(scan, 'on'), 2700);
+                later(() => { off(scan, 'on'); off(cam, 'hl'); on(finBox, 'hl'); }, 4100);
+                typeInto(fin, '125980.2', 70, 4200);
+                later(() => off(finBox, 'hl'), 5000);
+                later(() => on(sales, 'on'), 5100);
+                return 7600;
+            },
+            3(d) {
+                const btn = k(d, 'appsBtn'), panel = k(d, 'panel'), sign = k(d, 'sign');
+                const atm = k(d, 'atm'), reb = k(d, 'reb'), atmBox = k(d, 'atmBox'), rebBox = k(d, 'rebBox'), cash = k(d, 'cash');
+                off(panel, 'open'); off(btn, 'hl'); off(atmBox, 'hl'); off(rebBox, 'hl'); off(cash, 'pop');
+                sign.className = 'fa-solid fa-plus';
+                atm.textContent = '0'; reb.textContent = '0'; cash.textContent = '0.00';
+
+                later(() => on(btn, 'hl'), 300);
+                later(() => { on(panel, 'open'); sign.className = 'fa-solid fa-minus'; }, 1000);
+                later(() => off(btn, 'hl'), 1200);
+                later(() => on(atmBox, 'hl'), 1700);
+                typeInto(atm, '1200', 150, 1800);
+                later(() => off(atmBox, 'hl'), 2700);
+                later(() => on(rebBox, 'hl'), 2900);
+                typeInto(reb, '350', 150, 3000);
+                later(() => off(rebBox, 'hl'), 3800);
+                later(() => { cash.textContent = '1,985.30'; on(cash, 'pop'); }, 4100);
+                later(() => off(cash, 'pop'), 4500);
+                return 7000;
+            },
+            4(d) {
+                const wa = k(d, 'wa'), shift = k(d, 'shift'), toast = k(d, 'toast');
+                const badge = k(d, 'badge'), icon = k(d, 'bicon');
+                off(d, 'night'); off(wa, 'hl'); off(shift, 'hl'); off(toast, 'on');
+                badge.textContent = 'DAY SHIFT (6AM-6PM)'; icon.className = 'fa-regular fa-sun';
+
+                later(() => on(wa, 'hl'), 300);
+                later(() => on(toast, 'on'), 1100);
+                later(() => off(wa, 'hl'), 1400);
+                later(() => off(toast, 'on'), 3000);
+                later(() => on(shift, 'hl'), 3300);
+                later(() => {
+                    off(shift, 'hl'); on(d, 'night');
+                    badge.textContent = 'NIGHT SHIFT (6PM-6AM)'; icon.className = 'fa-regular fa-moon';
+                }, 4200);
+                return 7200;
+            }
+        };
+
+        function loop(name, d) {
+            const total = demos[name](d);
+            later(() => loop(name, d), total);
+        }
+
+        function startDemos() {
+            stopDemos();
+            document.querySelectorAll('#tutorial .tut-demo').forEach(d => loop(d.dataset.demo, d));
+        }
+        function stopDemos() { timers.forEach(clearTimeout); timers = []; }
+
+        function markSeen() { try { localStorage.setItem(KEY, '1'); } catch (e) {} }
+
+        window.openTutorial = function () {
+            if (isOpen) return;
+            isOpen = true;
+            const el = document.getElementById('tutorial');
+            el.style.display = 'flex';
+            el.querySelector('.tut-scroll').scrollTop = 0;
+            document.body.style.overflow = 'hidden';
+            try { history.pushState({ tut: 1 }, ''); } catch (e) {}
+            startDemos();
+        };
+
+        window.closeTutorial = function (fromBack) {
+            if (!isOpen) return;
+            isOpen = false;
+            document.getElementById('tutorial').style.display = 'none';
+            document.body.style.overflow = '';
+            stopDemos();
+            markSeen();
+            if (fromBack !== true) { try { history.back(); } catch (e) {} }
+        };
+
+
+        // ===== Language support for the guide =====
+        const LANG_KEY = 'reben_tutorial_lang';
+        const RTL = { ar: true, ur: true };
+        const I18N = {
+            en: {
+                title: "How to Fill Shift Data",
+                sub: "Visual guide for station staff · No training needed",
+                s1t: "Station & Prices", s1d: "Type Station Name & set fuel prices (91, 95, D).",
+                s2t: "Initial & Final Meter", s2d: "Type numbers, or tap Camera / Mic to capture.",
+                s3t: "Apps & Cash Check", s3d: "Tap APPS to enter ATM / Reben App totals.",
+                s4t: "Send & Next Shift", s4d: "Tap WhatsApp to send report, SHIFT to rotate.",
+                example: "EXAMPLE", ok: "Got it — start"
+            },
+            ar: {
+                title: "كيفية تعبئة بيانات الوردية",
+                sub: "دليل مرئي لموظفي المحطة · لا حاجة إلى تدريب",
+                s1t: "المحطة والأسعار", s1d: "اكتب اسم المحطة وحدّد أسعار الوقود (91، 95، D).",
+                s2t: "قراءة العداد: البداية والنهاية", s2d: "اكتب الأرقام، أو اضغط على الكاميرا / الميكروفون لإدخال القراءة.",
+                s3t: "التطبيقات وفحص النقد", s3d: "اضغط على APPS لإدخال إجمالي مبالغ ATM / Reben App.",
+                s4t: "الإرسال والوردية التالية", s4d: "اضغط على زر واتساب لإرسال التقرير، وعلى SHIFT لتبديل الوردية.",
+                example: "مثال", ok: "فهمت — ابدأ"
+            },
+            hi: {
+                title: "शिफ्ट डेटा कैसे भरें",
+                sub: "स्टेशन स्टाफ के लिए विज़ुअल गाइड · किसी ट्रेनिंग की ज़रूरत नहीं",
+                s1t: "स्टेशन और कीमतें", s1d: "स्टेशन का नाम लिखें और ईंधन की कीमतें (91, 95, D) भरें।",
+                s2t: "शुरुआती और अंतिम मीटर", s2d: "नंबर टाइप करें, या कैमरा / माइक दबाकर दर्ज करें।",
+                s3t: "ऐप्स और कैश जाँच", s3d: "ATM / Reben App की कुल रकम भरने के लिए APPS दबाएँ।",
+                s4t: "भेजें और अगली शिफ्ट", s4d: "रिपोर्ट भेजने के लिए WhatsApp दबाएँ, शिफ्ट बदलने के लिए SHIFT दबाएँ।",
+                example: "उदाहरण", ok: "समझ गया — शुरू करें"
+            },
+            ur: {
+                title: "شفٹ کا ڈیٹا کیسے بھریں",
+                sub: "اسٹیشن عملے کے لیے بصری گائیڈ · کسی تربیت کی ضرورت نہیں",
+                s1t: "اسٹیشن اور قیمتیں", s1d: "اسٹیشن کا نام لکھیں اور ایندھن کی قیمتیں (91، 95، D) درج کریں۔",
+                s2t: "ابتدائی اور آخری میٹر", s2d: "نمبر ٹائپ کریں، یا کیمرا / مائیک دبا کر درج کریں۔",
+                s3t: "ایپس اور کیش چیک", s3d: "ATM / Reben App کی کل رقم درج کرنے کے لیے APPS دبائیں۔",
+                s4t: "بھیجیں اور اگلی شفٹ", s4d: "رپورٹ بھیجنے کے لیے WhatsApp دبائیں، شفٹ بدلنے کے لیے SHIFT دبائیں۔",
+                example: "مثال", ok: "سمجھ گیا — شروع کریں"
+            },
+            bn: {
+                title: "শিফটের তথ্য কীভাবে পূরণ করবেন",
+                sub: "স্টেশন কর্মীদের জন্য ভিজ্যুয়াল গাইড · কোনো প্রশিক্ষণ লাগবে না",
+                s1t: "স্টেশন ও দাম", s1d: "স্টেশনের নাম লিখুন এবং জ্বালানির দাম (91, 95, D) দিন।",
+                s2t: "শুরু ও শেষ মিটার", s2d: "সংখ্যা টাইপ করুন, অথবা ক্যামেরা / মাইক চেপে ইনপুট দিন।",
+                s3t: "অ্যাপস ও ক্যাশ চেক", s3d: "ATM / Reben App-এর মোট টাকার অঙ্ক দিতে APPS চাপুন।",
+                s4t: "পাঠান ও পরবর্তী শিফট", s4d: "রিপোর্ট পাঠাতে WhatsApp চাপুন, শিফট বদলাতে SHIFT চাপুন।",
+                example: "উদাহরণ", ok: "বুঝেছি — শুরু করুন"
+            }
+        };
+
+        function detectLang() {
+            try {
+                const saved = localStorage.getItem(LANG_KEY);
+                if (saved && I18N[saved]) return saved;
+            } catch (e) {}
+            const nav = ((navigator.language || 'en') + '').slice(0, 2).toLowerCase();
+            return I18N[nav] ? nav : 'en';
+        }
+
+        window.setTutLang = function (code) {
+            if (!I18N[code]) code = 'en';
+            const root = document.getElementById('tutorial');
+            const dict = I18N[code];
+            root.querySelectorAll('[data-i18n]').forEach(el => {
+                const v = dict[el.getAttribute('data-i18n')];
+                if (v) el.textContent = v;
+            });
+            const dir = RTL[code] ? 'rtl' : 'ltr';
+            root.querySelectorAll('.tut-head, .tut-step-head').forEach(el => { el.dir = dir; });
+            root.setAttribute('lang', code);
+            root.classList.toggle('tut-nonlatin', code !== 'en');
+            root.querySelectorAll('.tut-lang').forEach(b => b.classList.toggle('on', b.dataset.lang === code));
+            try { localStorage.setItem(LANG_KEY, code); } catch (e) {}
+        };
+        window.setTutLang(detectLang());
+
+        // Phone back button closes the guide instead of leaving the app
+        window.addEventListener('popstate', () => { if (isOpen) window.closeTutorial(true); });
+
+        // Show automatically the first time the app is opened
+        window.addEventListener('load', () => {
+            let seen = false;
+            try { seen = !!localStorage.getItem(KEY); } catch (e) {}
+            if (!seen) setTimeout(window.openTutorial, 700);
+        });
+    })();
+</script>
+</body>
+</html>

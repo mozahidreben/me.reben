@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E30613" />
+      <stop offset="100%" stop-color="#B8040E" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <!-- Clean Fuel Dispenser / Shift Emblem -->
+  <g fill="#ffffff">
+    <!-- Dispenser body -->
+    <rect x="148" y="116" width="168" height="276" rx="26" />
+    <!-- Red meter screen cutout -->
+    <rect x="176" y="146" width="112" height="72" rx="12" fill="#E30613" />
+    <!-- Digital bars inside screen -->
+    <rect x="192" y="170" width="80" height="10" rx="5" fill="#ffffff" />
+    <rect x="192" y="188" width="52" height="8" rx="4" fill="#fca5a5" />
+    <!-- Dispenser nozzle drop icon below screen -->
+    <path d="M232 252c0 0-34 38-34 62a34 34 0 0 0 68 0c0-24-34-62-34-62z" fill="#E30613" />
+    <!-- Base pedestal -->
+    <rect x="128" y="376" width="208" height="26" rx="10" />
+    <!-- Fuel hose & nozzle handle on right -->
+    <path d="M316 184h24c16 0 28 12 28 28v104c0 18-14 32-32 32h-20" fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="round" />
+    <rect x="336" y="142" width="32" height="58" rx="10" />
+  </g>
+</svg>

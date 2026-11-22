@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <script>
+      if (window.AndroidBridge) document.documentElement.classList.add('android-app');
+      (function () {
+        try {
+          var own = Object.getOwnPropertyDescriptor(window, 'fetch');
+          var proto = !own && window.Window && Window.prototype
+            ? Object.getOwnPropertyDescriptor(Window.prototype, 'fetch')
+            : null;
+          var desc = own || proto;
+          if (desc && desc.get && !desc.set && (!own || own.configurable)) {
+            var fn = window.fetch.bind(window);
+            Object.defineProperty(window, 'fetch', {
+              configurable: true,
+              enumerable: true,
+              writable: true,
+              value: fn
+            });
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <title>Reben Station Shift</title>
+    <meta name="description" content="Mobile fuel station shift reporting, meter OCR scanning, cash reconciliation, multi-station switching, and offline multi-language voice guide." />
+    <meta name="theme-color" content="#E30613" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Reben Shift" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta property="og:title" content="Reben Station Shift" />
+    <meta property="og:description" content="Mobile fuel station shift reporting, meter OCR scanning, cash reconciliation, multi-station switching, and offline multi-language voice guide." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
