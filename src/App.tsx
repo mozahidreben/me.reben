@@ -20,16 +20,17 @@ import { GUIDE_CONTENT } from './data/guideContent.ts';
 import type { GuideLang } from './data/guideContent.ts';
 import { APP_I18N } from './data/appI18n.ts';
 import type {
+  AdminConfig,
   AppPayments,
   FuelPrices,
   FuelType,
   HistoryShiftEntry,
+  LicenseEvaluation,
   NozzleItem,
   PaymentBreakdown,
   StationWorkspace,
 } from './types/reben.ts';
 import {
-  GOOGLE_SHEET_URL,
   IS_ANDROID_APP,
   cleanStationName,
   exportExcelReport,
@@ -41,11 +42,25 @@ import {
   shareWhatsAppReport,
   shiftPeriod,
 } from './utils/rebenExport.ts';
+import { getAdminConfig, resolveSheetUrl, saveAdminConfig, verifyAdminPin } from './utils/adminConfig.ts';
+import {
+  evaluateLicenseStatus,
+  getOrCreateDeviceId,
+  hydrateLicenseRuntimeConfig,
+  verifySheetLicenseInBackground,
+} from './utils/license.ts';
 import { TutorialModal } from './components/TutorialModal.tsx';
 import { ScannerModal } from './components/ScannerModal.tsx';
 import { HistoryModal } from './components/HistoryModal.tsx';
 import { PWAInstallButton } from './components/PWAInstallButton.tsx';
 import { StationSwitcherModal } from './components/StationSwitcherModal.tsx';
+import { SplashScreen } from './components/SplashScreen.tsx';
+import { AdminSettingsModal } from './components/AdminSettingsModal.tsx';
+import { LicenseGateModal } from './components/LicenseGateModal.tsx';
+import { SellerStudioModal } from './components/SellerStudioModal.tsx';
+import { AdBannerBar } from './components/AdBannerBar.tsx';
+import { AdGateModal } from './components/AdGateModal.tsx';
+import { isAdSupportedMode, requestNativeRewardedAd, syncAndroidAdsState } from './utils/ads.ts';
 
 const MEM_KEY = 'reben_v3_premium';
 const STATIONS_KEY = 'reben_stations_v1';
@@ -102,6 +117,10 @@ function normalizeNozzles(raw: unknown[]): { loaded: NozzleItem[]; nextId: numbe
 
 function createStationFromLegacy(legacy: Record<string, unknown>, id = 'st_default'): StationWorkspace {
   const { loaded } = normalizeNozzles((legacy.nozzles as unknown[]) || []);
+  const customApps =
+    legacy.customApps && typeof legacy.customApps === 'object'
+      ? (legacy.customApps as Record<string, string>)
+      : {};
   return {
     id,
     stationName: String(legacy.sn || ''),
@@ -122,6 +141,7 @@ function createStationFromLegacy(legacy: Record<string, unknown>, id = 'st_defau
       vwallet: String(legacy.appVwallet ?? '0'),
       car: String(legacy.appCar ?? '0'),
       other: String(legacy.appOther ?? '0'),
+      ...customApps,
     },
     nozzles: loaded,
     updatedAt: typeof legacy.savedAt === 'number' ? legacy.savedAt : Date.now(),
@@ -132,6 +152,7 @@ interface ConfirmDialogState {
   title: string;
   message: string;
   confirmLabel?: string;
+  requirePin?: boolean;
   onConfirm: () => void;
 }
 
@@ -182,6 +203,31 @@ export default function App() {
     D: false,
     K: false,
   });
+
+  // Owner commercial settings & splash
+  const [adminConfig, setAdminConfig] = useState<AdminConfig>(() => getAdminConfig());
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [splashPreview, setSplashPreview] = useState<{ key: number; cfg: AdminConfig } | null>(null);
+  const [confirmPinInput, setConfirmPinInput] = useState('');
+  const [confirmPinError, setConfirmPinError] = useState(false);
+
+  // Commercial licensing & Seller Studio
+  const [licenseEval, setLicenseEval] = useState<LicenseEvaluation>(() => ({
+    unlocked: true,
+    status: 'trial',
+    mode: 'trial',
+    plan: 'trial',
+    daysLeft: 7,
+    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    deviceId: getOrCreateDeviceId(),
+    isTrialWatermark: true,
+  }));
+  const [licenseModalOpen, setLicenseModalOpen] = useState(false);
+  const [sellerStudioOpen, setSellerStudioOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.location.hash === '#seller' || new URLSearchParams(window.location.search).get('seller') === '1';
+  });
+  const [pendingAdExport, setPendingAdExport] = useState<{ label: string; run: () => void } | null>(null);
 
   // Modals & overlays
   const [tutorialOpen, setTutorialOpen] = useState(false);
@@ -309,6 +355,29 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Evaluate commercial license & run background Master Sheet verification
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      await hydrateLicenseRuntimeConfig();
+      const firstEval = await evaluateLicenseStatus();
+      if (!active) return;
+      setLicenseEval(firstEval);
+      const bgEval = await verifySheetLicenseInBackground();
+      if (!active || !bgEval) return;
+      setLicenseEval(bgEval);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const adsActive = isAdSupportedMode(licenseEval);
+
+  useEffect(() => {
+    syncAndroidAdsState(adsActive);
+  }, [adsActive]);
+
   // Keep active station synced in stations array and legacy MEM_KEY
   useEffect(() => {
     if (!hydratedRef.current) return;
@@ -351,6 +420,7 @@ export default function App() {
           appVwallet: apps.vwallet,
           appCar: apps.car,
           appOther: apps.other,
+          customApps: apps,
           nozzles: nozzles.map((n) => ({
             name: n.name,
             type: n.type,
@@ -466,17 +536,28 @@ export default function App() {
   }, [nozzles, prices]);
 
   const payments: PaymentBreakdown = useMemo(() => {
-    const r = parseFloat(apps.reben) || 0;
-    const p = parseFloat(apps.petro) || 0;
-    const s = parseFloat(apps.sayyara) || 0;
-    const k = parseFloat(apps.kafarat) || 0;
-    const v = parseFloat(apps.vwallet) || 0;
-    const c = parseFloat(apps.car) || 0;
-    const o = parseFloat(apps.other) || 0;
-    const appsTotal = r + p + s + k + v + c + o;
+    const items = adminConfig.paymentMethods.map((pm) => ({
+      id: pm.id,
+      label: pm.label,
+      amount: parseFloat(apps[pm.id] || '0') || 0,
+    }));
+    const appsTotal = items.reduce((sum, item) => sum + item.amount, 0);
     const cash = math.total - appsTotal;
-    return { total: math.total, appsTotal, cash, r, p, s, k, v, c, o };
-  }, [apps, math.total]);
+    const byId = new Map(items.map((it) => [it.id, it.amount]));
+    return {
+      total: math.total,
+      appsTotal,
+      cash,
+      r: byId.get('reben') ?? 0,
+      p: byId.get('petro') ?? 0,
+      s: byId.get('sayyara') ?? 0,
+      k: byId.get('kafarat') ?? 0,
+      v: byId.get('vwallet') ?? 0,
+      c: byId.get('car') ?? 0,
+      o: byId.get('other') ?? 0,
+      items,
+    };
+  }, [adminConfig.paymentMethods, apps, math.total]);
 
   const validateReport = useCallback((): boolean => {
     let valid = true;
@@ -521,7 +602,7 @@ export default function App() {
     return valid;
   }, [nozzles, prices, showToast, stationName, strings.toastMissingStationPrices, strings.toastNeedOneNozzle]);
 
-  const addNewNozzle = () => {
+  const performAddNozzle = () => {
     const id = nextIdRef.current++;
     setNozzles((prev) => [
       ...prev,
@@ -530,6 +611,29 @@ export default function App() {
     window.setTimeout(() => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     }, 50);
+  };
+
+  const addNewNozzle = () => {
+    if (adminConfig.nozzleAddMode === 'block') {
+      showToast(strings.nozzleAddLockedToast, 'warn', 2600);
+      return;
+    }
+    if (adminConfig.nozzleAddMode === 'pin') {
+      setConfirmPinInput('');
+      setConfirmPinError(false);
+      setConfirmDialog({
+        title: strings.addNozzleTitle,
+        message: strings.addNozzlePinMsg,
+        confirmLabel: strings.addNozzleConfirm,
+        requirePin: true,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          performAddNozzle();
+        },
+      });
+      return;
+    }
+    performAddNozzle();
   };
 
   const updateNozzle = (id: number, patch: Partial<NozzleItem>) => {
@@ -554,10 +658,13 @@ export default function App() {
 
   const toggleInitLock = (nozzle: NozzleItem) => {
     if (nozzle.locked) {
+      setConfirmPinInput('');
+      setConfirmPinError(false);
       setConfirmDialog({
         title: strings.unlockTitle,
-        message: strings.unlockMsg,
+        message: adminConfig.lockInitialWithPin ? strings.pinRequiredUnlockMsg : strings.unlockMsg,
         confirmLabel: strings.unlockConfirm,
+        requirePin: adminConfig.lockInitialWithPin,
         onConfirm: () => {
           setConfirmDialog(null);
           updateNozzle(nozzle.id, { locked: false });
@@ -569,10 +676,18 @@ export default function App() {
   };
 
   const handleDeleteNozzle = (nozzle: NozzleItem) => {
+    if (adminConfig.nozzleDeleteMode === 'block') {
+      showToast(strings.nozzleDeleteLockedToast, 'warn', 2600);
+      return;
+    }
+    const askPin = adminConfig.nozzleDeleteMode === 'pin';
+    setConfirmPinInput('');
+    setConfirmPinError(false);
     setConfirmDialog({
       title: strings.deleteNozzleTitle,
-      message: `${strings.deleteNozzleMsg} (${nozzle.name})`,
+      message: `${askPin ? strings.deleteNozzlePinMsg : strings.deleteNozzleMsg} (${nozzle.name})`,
       confirmLabel: strings.deleteConfirm,
+      requirePin: askPin,
       onConfirm: () => {
         setConfirmDialog(null);
         setNozzles((prev) => prev.filter((n) => n.id !== nozzle.id));
@@ -681,7 +796,9 @@ export default function App() {
 
   const syncToSheet = useCallback(async () => {
     saveShiftToHistory();
-    if (!GOOGLE_SHEET_URL) return;
+    if (!adminConfig.sheetSyncEnabled) return;
+    const targetSheetUrl = resolveSheetUrl(adminConfig.sheetUrlOrId);
+    if (!targetSheetUrl) return;
     if (!navigator.onLine) {
       setSyncState('pending');
       return;
@@ -717,6 +834,7 @@ export default function App() {
           other: payments.o,
           appsTotal: payments.appsTotal,
           cash: payments.cash,
+          items: payments.items,
         },
       },
       prices: { p91, p95, p98, pd, pk },
@@ -738,7 +856,7 @@ export default function App() {
     };
 
     try {
-      await fetch(GOOGLE_SHEET_URL, {
+      await fetch(targetSheetUrl, {
         method: 'POST',
         mode: 'no-cors',
         cache: 'no-cache',
@@ -749,7 +867,7 @@ export default function App() {
     } catch {
       setSyncState('pending');
     }
-  }, [isDayTime, math.grandTotalFormatted, math.sums, nozzles, payments, prices, saveShiftToHistory, stationName]);
+  }, [adminConfig.sheetSyncEnabled, adminConfig.sheetUrlOrId, isDayTime, math.grandTotalFormatted, math.sums, nozzles, payments, prices, saveShiftToHistory, stationName]);
 
   const rotateShiftInternal = async (auto = false) => {
     setIsSyncingShift(true);
@@ -782,14 +900,17 @@ export default function App() {
 
   const handleRotateShiftClick = () => {
     const missing = nozzles.filter((n) => n.final.trim() === '').length;
-    let q = strings.rotateMsg;
+    let q = adminConfig.lockShiftWithPin ? strings.pinRequiredShiftMsg : strings.rotateMsg;
     if (missing > 0) {
       q += `\n\n${missing} ${strings.rotateMissingSuffix}`;
     }
+    setConfirmPinInput('');
+    setConfirmPinError(false);
     setConfirmDialog({
       title: strings.rotateTitle,
       message: q,
       confirmLabel: strings.rotateConfirm,
+      requirePin: adminConfig.lockShiftWithPin,
       onConfirm: () => {
         setConfirmDialog(null);
         rotateShiftInternal(false);
@@ -811,7 +932,7 @@ export default function App() {
     }
   };
 
-  const handleOpenHistory = () => {
+  const openHistoryModal = () => {
     try {
       const items: HistoryShiftEntry[] = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]') || [];
       setHistoryItems(items);
@@ -819,6 +940,25 @@ export default function App() {
       setHistoryItems([]);
     }
     setHistoryOpen(true);
+  };
+
+  const handleOpenHistory = () => {
+    if (adminConfig.lockHistoryWithPin) {
+      setConfirmPinInput('');
+      setConfirmPinError(false);
+      setConfirmDialog({
+        title: strings.historyTitle,
+        message: strings.pinRequiredHistoryMsg,
+        confirmLabel: strings.unlockSetupBtn,
+        requirePin: true,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          openHistoryModal();
+        },
+      });
+      return;
+    }
+    openHistoryModal();
   };
 
   const handleSelectHistory = (item: HistoryShiftEntry) => {
@@ -830,7 +970,8 @@ export default function App() {
       pd: item.prices.pd || '',
       pk: item.prices.pk || '',
     });
-    setApps({
+    const nextApps: AppPayments = {
+      ...EMPTY_APPS,
       reben: String(item.payments.r ?? 0),
       petro: String(item.payments.p ?? 0),
       sayyara: String(item.payments.s ?? 0),
@@ -838,7 +979,13 @@ export default function App() {
       vwallet: String(item.payments.v ?? 0),
       car: String(item.payments.c ?? 0),
       other: String(item.payments.o ?? 0),
-    });
+    };
+    if (Array.isArray(item.payments.items)) {
+      item.payments.items.forEach((it) => {
+        if (it && it.id) nextApps[it.id] = String(it.amount ?? 0);
+      });
+    }
+    setApps(nextApps);
     const { loaded, nextId } = normalizeNozzles(item.nozzles || []);
     setNozzles(loaded);
     nextIdRef.current = nextId;
@@ -885,7 +1032,16 @@ export default function App() {
   // Smooth mobile touch Pull-to-Refresh when at top of page with no modal open
   useEffect(() => {
     const hasOverlayOpen =
-      tutorialOpen || historyOpen || stationModalOpen || scannerTarget !== null || confirmDialog !== null;
+      tutorialOpen ||
+      historyOpen ||
+      stationModalOpen ||
+      adminModalOpen ||
+      licenseModalOpen ||
+      sellerStudioOpen ||
+      pendingAdExport !== null ||
+      !licenseEval.unlocked ||
+      scannerTarget !== null ||
+      confirmDialog !== null;
 
     const onTouchStart = (e: TouchEvent) => {
       if (hasOverlayOpen || isRefreshing) return;
@@ -940,7 +1096,20 @@ export default function App() {
       window.removeEventListener('touchend', onTouchEnd);
       window.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [tutorialOpen, historyOpen, stationModalOpen, scannerTarget, confirmDialog, isRefreshing, triggerPullRefresh]);
+  }, [
+    tutorialOpen,
+    historyOpen,
+    stationModalOpen,
+    adminModalOpen,
+    licenseModalOpen,
+    sellerStudioOpen,
+    pendingAdExport,
+    licenseEval.unlocked,
+    scannerTarget,
+    confirmDialog,
+    isRefreshing,
+    triggerPullRefresh,
+  ]);
 
   const handleChangeGuideLang = (newLang: GuideLang) => {
     setGuideLang(newLang);
@@ -963,7 +1132,7 @@ export default function App() {
     showToast(`${strings.switchedStationToast}: ${display}`, 'ok', 2500);
   };
 
-  const handleAddStation = (name: string, copyPrices: boolean) => {
+  const performAddStation = (name: string, copyPrices: boolean) => {
     const newId = `st_${Date.now()}`;
     const newStation: StationWorkspace = {
       id: newId,
@@ -983,12 +1152,34 @@ export default function App() {
     showToast(`${strings.switchedStationToast}: ${name || strings.unnamedStation}`, 'ok', 2500);
   };
 
+  const handleAddStation = (name: string, copyPrices: boolean) => {
+    if (adminConfig.lockStationsManage) {
+      setConfirmPinInput('');
+      setConfirmPinError(false);
+      setConfirmDialog({
+        title: strings.stationsTitle,
+        message: strings.pinRequiredStationMsg,
+        confirmLabel: strings.addStationBtn,
+        requirePin: true,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          performAddStation(name, copyPrices);
+        },
+      });
+      return;
+    }
+    performAddStation(name, copyPrices);
+  };
+
   const handleDeleteStation = (id: string) => {
     if (stations.length <= 1 || id === activeStationId) return;
+    setConfirmPinInput('');
+    setConfirmPinError(false);
     setConfirmDialog({
       title: strings.deleteStationTitle,
-      message: strings.deleteStationMsg,
+      message: adminConfig.lockStationsManage ? strings.pinRequiredStationMsg : strings.deleteStationMsg,
       confirmLabel: strings.deleteConfirm,
+      requirePin: adminConfig.lockStationsManage,
       onConfirm: () => {
         setConfirmDialog(null);
         setStations((prev) => prev.filter((s) => s.id !== id));
@@ -1013,6 +1204,15 @@ export default function App() {
 
   return (
     <div className="app-shell" dir={strings.rtl ? 'rtl' : 'ltr'} lang={guideLang}>
+      {/* Launch Splash Screen (2-2.5s) */}
+      <SplashScreen
+        key={splashPreview ? `preview-${splashPreview.key}` : 'boot'}
+        enabled={splashPreview ? true : adminConfig.splashEnabled}
+        brandName={splashPreview ? splashPreview.cfg.brandName : adminConfig.brandName}
+        showName={splashPreview ? splashPreview.cfg.splashShowName : adminConfig.splashShowName}
+        customLogoDataUrl={splashPreview ? splashPreview.cfg.customLogoDataUrl : adminConfig.customLogoDataUrl}
+      />
+
       {/* Smooth Pull-to-Refresh Indicator */}
       <div
         className={`ptr-wrap ${isRefreshing || pullDistance > 4 ? 'visible' : ''}`}
@@ -1055,10 +1255,17 @@ export default function App() {
             ref={stationInputRef}
             type="text"
             id="sn"
-            className={`station-input ${invalidStation ? 'invalid' : ''}`}
+            readOnly={adminConfig.lockStationPrices}
+            className={`station-input ${invalidStation ? 'invalid' : ''} ${adminConfig.lockStationPrices ? 'owner-locked' : ''}`}
             placeholder={strings.stationPlaceholder}
             value={stationName}
+            onClick={() => {
+              if (adminConfig.lockStationPrices) {
+                showToast(strings.ownerLockedFieldToast, '', 2200);
+              }
+            }}
             onChange={(e) => {
+              if (adminConfig.lockStationPrices) return;
               setStationName(e.target.value);
               if (invalidStation && e.target.value.trim()) setInvalidStation(false);
             }}
@@ -1072,9 +1279,14 @@ export default function App() {
                 id="p91"
                 step="0.01"
                 placeholder="0.00"
-                className={invalidPrices['91'] ? 'invalid' : ''}
+                readOnly={adminConfig.lockStationPrices}
+                className={`${invalidPrices['91'] ? 'invalid' : ''} ${adminConfig.lockStationPrices ? 'owner-locked' : ''}`}
                 value={prices.p91}
+                onClick={() => {
+                  if (adminConfig.lockStationPrices) showToast(strings.ownerLockedFieldToast, '', 2200);
+                }}
                 onChange={(e) => {
+                  if (adminConfig.lockStationPrices) return;
                   setPrices((p) => ({ ...p, p91: e.target.value }));
                   setInvalidPrices((ip) => ({ ...ip, '91': false }));
                 }}
@@ -1087,9 +1299,14 @@ export default function App() {
                 id="p95"
                 step="0.01"
                 placeholder="0.00"
-                className={invalidPrices['95'] ? 'invalid' : ''}
+                readOnly={adminConfig.lockStationPrices}
+                className={`${invalidPrices['95'] ? 'invalid' : ''} ${adminConfig.lockStationPrices ? 'owner-locked' : ''}`}
                 value={prices.p95}
+                onClick={() => {
+                  if (adminConfig.lockStationPrices) showToast(strings.ownerLockedFieldToast, '', 2200);
+                }}
                 onChange={(e) => {
+                  if (adminConfig.lockStationPrices) return;
                   setPrices((p) => ({ ...p, p95: e.target.value }));
                   setInvalidPrices((ip) => ({ ...ip, '95': false }));
                 }}
@@ -1102,9 +1319,14 @@ export default function App() {
                 id="p98"
                 step="0.01"
                 placeholder="0.00"
-                className={invalidPrices['98'] ? 'invalid' : ''}
+                readOnly={adminConfig.lockStationPrices}
+                className={`${invalidPrices['98'] ? 'invalid' : ''} ${adminConfig.lockStationPrices ? 'owner-locked' : ''}`}
                 value={prices.p98}
+                onClick={() => {
+                  if (adminConfig.lockStationPrices) showToast(strings.ownerLockedFieldToast, '', 2200);
+                }}
                 onChange={(e) => {
+                  if (adminConfig.lockStationPrices) return;
                   setPrices((p) => ({ ...p, p98: e.target.value }));
                   setInvalidPrices((ip) => ({ ...ip, '98': false }));
                 }}
@@ -1117,9 +1339,14 @@ export default function App() {
                 id="pd"
                 step="0.01"
                 placeholder="0.00"
-                className={invalidPrices['D'] ? 'invalid' : ''}
+                readOnly={adminConfig.lockStationPrices}
+                className={`${invalidPrices['D'] ? 'invalid' : ''} ${adminConfig.lockStationPrices ? 'owner-locked' : ''}`}
                 value={prices.pd}
+                onClick={() => {
+                  if (adminConfig.lockStationPrices) showToast(strings.ownerLockedFieldToast, '', 2200);
+                }}
                 onChange={(e) => {
+                  if (adminConfig.lockStationPrices) return;
                   setPrices((p) => ({ ...p, pd: e.target.value }));
                   setInvalidPrices((ip) => ({ ...ip, D: false }));
                 }}
@@ -1132,9 +1359,14 @@ export default function App() {
                 id="pk"
                 step="0.01"
                 placeholder="0.00"
-                className={invalidPrices['K'] ? 'invalid' : ''}
+                readOnly={adminConfig.lockStationPrices}
+                className={`${invalidPrices['K'] ? 'invalid' : ''} ${adminConfig.lockStationPrices ? 'owner-locked' : ''}`}
                 value={prices.pk}
+                onClick={() => {
+                  if (adminConfig.lockStationPrices) showToast(strings.ownerLockedFieldToast, '', 2200);
+                }}
                 onChange={(e) => {
+                  if (adminConfig.lockStationPrices) return;
                   setPrices((p) => ({ ...p, pk: e.target.value }));
                   setInvalidPrices((ip) => ({ ...ip, K: false }));
                 }}
@@ -1151,76 +1383,37 @@ export default function App() {
       {appsVisible && (
         <div className="apps-card" ref={appsCardRef}>
           <div className="apps-grid">
-            <div className="app-item">
-              <label>{strings.atmLabel}</label>
-              <input
-                type="number"
-                step="0.01"
-                dir="ltr"
-                value={apps.reben}
-                onChange={(e) => setApps((a) => ({ ...a, reben: e.target.value }))}
-              />
-            </div>
-            <div className="app-item">
-              <label>{strings.rebenAppLabel}</label>
-              <input
-                type="number"
-                step="0.01"
-                dir="ltr"
-                value={apps.petro}
-                onChange={(e) => setApps((a) => ({ ...a, petro: e.target.value }))}
-              />
-            </div>
-            <div className="app-item">
-              <label>{strings.petroAppLabel}</label>
-              <input
-                type="number"
-                step="0.01"
-                dir="ltr"
-                value={apps.sayyara}
-                onChange={(e) => setApps((a) => ({ ...a, sayyara: e.target.value }))}
-              />
-            </div>
-            <div className="app-item">
-              <label>{strings.sayyarahAppLabel}</label>
-              <input
-                type="number"
-                step="0.01"
-                dir="ltr"
-                value={apps.kafarat}
-                onChange={(e) => setApps((a) => ({ ...a, kafarat: e.target.value }))}
-              />
-            </div>
-            <div className="app-item">
-              <label>{strings.kafartLabel}</label>
-              <input
-                type="number"
-                step="0.01"
-                dir="ltr"
-                value={apps.vwallet}
-                onChange={(e) => setApps((a) => ({ ...a, vwallet: e.target.value }))}
-              />
-            </div>
-            <div className="app-item">
-              <label>{strings.vwalletLabel}</label>
-              <input
-                type="number"
-                step="0.01"
-                dir="ltr"
-                value={apps.car}
-                onChange={(e) => setApps((a) => ({ ...a, car: e.target.value }))}
-              />
-            </div>
-            <div className="app-item">
-              <label>{strings.otherLabel}</label>
-              <input
-                type="number"
-                step="0.01"
-                dir="ltr"
-                value={apps.other}
-                onChange={(e) => setApps((a) => ({ ...a, other: e.target.value }))}
-              />
-            </div>
+            {adminConfig.paymentMethods.length === 0 ? (
+              <div
+                className="app-item"
+                style={{
+                  gridColumn: '1 / -1',
+                  textAlign: 'center',
+                  color: 'var(--text-secondary)',
+                  fontSize: 12,
+                  padding: '8px 4px',
+                }}
+              >
+                {strings.noPaymentMethodsMsg}
+              </div>
+            ) : (
+              adminConfig.paymentMethods.map((pm) => {
+                const rawVal = apps[pm.id];
+                return (
+                  <div className="app-item" key={pm.id}>
+                    <label title={pm.label}>{pm.label}</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      dir="ltr"
+                      placeholder="0.00"
+                      value={rawVal !== undefined ? rawVal : '0'}
+                      onChange={(e) => setApps((a) => ({ ...a, [pm.id]: e.target.value }))}
+                    />
+                  </div>
+                );
+              })
+            )}
             <div className="cash-inside-apps">
               <span>{strings.cashLabel}</span>
               <span className="tabular-nums" dir="ltr">
@@ -1243,15 +1436,26 @@ export default function App() {
             <div key={nozzle.id} className={`nozzle-card card-${nozzle.type.toLowerCase()}`}>
               <div className="card-header">
                 <input
-                  className="nozzle-name"
+                  className={`nozzle-name ${adminConfig.lockNozzleMeta ? 'owner-locked' : ''}`}
                   value={nozzle.name}
+                  readOnly={adminConfig.lockNozzleMeta}
                   placeholder={`${strings.nozzlePrefix} ${nozzle.id}`}
-                  onChange={(e) => updateNozzle(nozzle.id, { name: e.target.value })}
+                  onClick={() => {
+                    if (adminConfig.lockNozzleMeta) showToast(strings.ownerLockedFieldToast, '', 2200);
+                  }}
+                  onChange={(e) => {
+                    if (adminConfig.lockNozzleMeta) return;
+                    updateNozzle(nozzle.id, { name: e.target.value });
+                  }}
                 />
                 <select
-                  className={`fuel-badge ft-${nozzle.type.toLowerCase()}`}
+                  className={`fuel-badge ft-${nozzle.type.toLowerCase()} ${adminConfig.lockNozzleMeta ? 'owner-locked' : ''}`}
                   value={nozzle.type}
-                  onChange={(e) => updateNozzle(nozzle.id, { type: e.target.value as FuelType })}
+                  disabled={adminConfig.lockNozzleMeta}
+                  onChange={(e) => {
+                    if (adminConfig.lockNozzleMeta) return;
+                    updateNozzle(nozzle.id, { type: e.target.value as FuelType });
+                  }}
                 >
                   <option value="91">91</option>
                   <option value="95">95</option>
@@ -1269,7 +1473,7 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  className="delete-btn"
+                  className={`delete-btn ${adminConfig.nozzleDeleteMode === 'block' ? 'owner-locked' : ''}`}
                   onClick={() => handleDeleteNozzle(nozzle)}
                   aria-label="Delete nozzle"
                 >
@@ -1359,6 +1563,11 @@ export default function App() {
       </div>
 
       <div className={`footer ${keyboardHidden ? 'kb-hidden' : ''}`} ref={footerRef}>
+        <AdBannerBar
+          visible={adsActive}
+          strings={strings}
+          onUpgradeClick={() => setLicenseModalOpen(true)}
+        />
         <div className="stats-row">
           <div>
             <div className="shift-badge">
@@ -1380,7 +1589,11 @@ export default function App() {
         </div>
 
         <div className="action-grid" dir="ltr">
-          <button className="action btn-add" onClick={addNewNozzle} type="button">
+          <button
+            className={`action btn-add ${adminConfig.nozzleAddMode === 'block' ? 'owner-locked' : ''}`}
+            onClick={addNewNozzle}
+            type="button"
+          >
             <Plus className="w-4 h-4" />
             <span>{strings.btnAdd}</span>
           </button>
@@ -1389,18 +1602,31 @@ export default function App() {
             <span>{strings.btnHistory}</span>
           </button>
           <button
-            className="action btn-excel"
-            onClick={() => {
+            className={`action btn-excel ${!adminConfig.reportAllowExcel ? 'owner-locked' : ''}`}
+            onClick={async () => {
+              if (!adminConfig.reportAllowExcel) {
+                showToast(strings.reportDisabledToast, 'warn', 2600);
+                return;
+              }
               if (!validateReport()) return;
-              exportExcelReport({
-                station: cleanStationName(stationName),
-                isDayTime,
-                prices,
-                nozzles,
-                sums: math.sums,
-                grandTotalFormatted: math.grandTotalFormatted,
-                payments,
-              });
+              const runExport = () =>
+                exportExcelReport({
+                  station: cleanStationName(stationName),
+                  isDayTime,
+                  prices,
+                  nozzles,
+                  sums: math.sums,
+                  grandTotalFormatted: math.grandTotalFormatted,
+                  payments,
+                });
+              if (!adsActive) {
+                runExport();
+                return;
+              }
+              const nativeRes = await requestNativeRewardedAd('excel');
+              if (nativeRes === 'rewarded') runExport();
+              else if (nativeRes === 'dismissed') showToast(strings.adGateDismissedToast, 'warn', 3500);
+              else setPendingAdExport({ label: strings.btnExcel, run: runExport });
             }}
             type="button"
           >
@@ -1426,20 +1652,33 @@ export default function App() {
             )}
           </button>
           <button
-            className="action btn-pdf"
-            onClick={() => {
+            className={`action btn-pdf ${!adminConfig.reportAllowPdf ? 'owner-locked' : ''}`}
+            onClick={async () => {
+              if (!adminConfig.reportAllowPdf) {
+                showToast(strings.reportDisabledToast, 'warn', 2600);
+                return;
+              }
               if (!validateReport()) return;
-              exportPdfReport({
-                mode: 'save',
-                station: cleanStationName(stationName),
-                isDayTime,
-                prices,
-                nozzles,
-                sums: math.sums,
-                payments,
-                onToast: showToast,
-                pdfFallbackMsg: strings.toastPdfFallback,
-              });
+              const runExport = () =>
+                exportPdfReport({
+                  mode: 'save',
+                  station: cleanStationName(stationName),
+                  isDayTime,
+                  prices,
+                  nozzles,
+                  sums: math.sums,
+                  payments,
+                  onToast: showToast,
+                  pdfFallbackMsg: strings.toastPdfFallback,
+                });
+              if (!adsActive) {
+                runExport();
+                return;
+              }
+              const nativeRes = await requestNativeRewardedAd('pdf_save');
+              if (nativeRes === 'rewarded') runExport();
+              else if (nativeRes === 'dismissed') showToast(strings.adGateDismissedToast, 'warn', 3500);
+              else setPendingAdExport({ label: strings.btnPdf, run: runExport });
             }}
             type="button"
           >
@@ -1447,20 +1686,33 @@ export default function App() {
             <span>{strings.btnPdf}</span>
           </button>
           <button
-            className="action btn-share"
-            onClick={() => {
+            className={`action btn-share ${!adminConfig.reportAllowPdf ? 'owner-locked' : ''}`}
+            onClick={async () => {
+              if (!adminConfig.reportAllowPdf) {
+                showToast(strings.reportDisabledToast, 'warn', 2600);
+                return;
+              }
               if (!validateReport()) return;
-              exportPdfReport({
-                mode: 'share',
-                station: cleanStationName(stationName),
-                isDayTime,
-                prices,
-                nozzles,
-                sums: math.sums,
-                payments,
-                onToast: showToast,
-                pdfFallbackMsg: strings.toastPdfFallback,
-              });
+              const runExport = () =>
+                exportPdfReport({
+                  mode: 'share',
+                  station: cleanStationName(stationName),
+                  isDayTime,
+                  prices,
+                  nozzles,
+                  sums: math.sums,
+                  payments,
+                  onToast: showToast,
+                  pdfFallbackMsg: strings.toastPdfFallback,
+                });
+              if (!adsActive) {
+                runExport();
+                return;
+              }
+              const nativeRes = await requestNativeRewardedAd('pdf_share');
+              if (nativeRes === 'rewarded') runExport();
+              else if (nativeRes === 'dismissed') showToast(strings.adGateDismissedToast, 'warn', 3500);
+              else setPendingAdExport({ label: strings.btnShare, run: runExport });
             }}
             type="button"
           >
@@ -1468,17 +1720,31 @@ export default function App() {
             <span>{strings.btnShare}</span>
           </button>
           <button
-            className="action btn-wa"
-            onClick={() => {
+            className={`action btn-wa ${!adminConfig.reportAllowWhatsApp ? 'owner-locked' : ''}`}
+            onClick={async () => {
+              if (!adminConfig.reportAllowWhatsApp) {
+                showToast(strings.reportDisabledToast, 'warn', 2600);
+                return;
+              }
               if (!validateReport()) return;
-              shareWhatsAppReport({
-                station: cleanStationName(stationName),
-                isDayTime,
-                nozzles,
-                sums: math.sums,
-                grandTotalFormatted: math.grandTotalFormatted,
-                payments,
-              });
+              const runExport = () =>
+                shareWhatsAppReport({
+                  station: cleanStationName(stationName),
+                  isDayTime,
+                  prices,
+                  nozzles,
+                  sums: math.sums,
+                  grandTotalFormatted: math.grandTotalFormatted,
+                  payments,
+                });
+              if (!adsActive) {
+                runExport();
+                return;
+              }
+              const nativeRes = await requestNativeRewardedAd('whatsapp');
+              if (nativeRes === 'rewarded') runExport();
+              else if (nativeRes === 'dismissed') showToast(strings.adGateDismissedToast, 'warn', 3500);
+              else setPendingAdExport({ label: 'WhatsApp', run: runExport });
             }}
             type="button"
             aria-label="Share to WhatsApp"
@@ -1496,9 +1762,44 @@ export default function App() {
       {/* Confirm Dialog */}
       {confirmDialog && (
         <div className="confirm-backdrop" role="dialog" aria-modal="true">
-          <div className="confirm-box">
-            <div className="confirm-title">{confirmDialog.title}</div>
-            <div className="confirm-msg">{confirmDialog.message}</div>
+          <form
+            className="confirm-box"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (confirmDialog.requirePin) {
+                if (!verifyAdminPin(confirmPinInput)) {
+                  setConfirmPinError(true);
+                  return;
+                }
+              }
+              confirmDialog.onConfirm();
+            }}
+          >
+            <div className="confirm-title flex items-center gap-2">
+              {confirmDialog.requirePin && <Lock className="w-4 h-4 text-[var(--reben-red)] shrink-0" />}
+              <span>{confirmDialog.title}</span>
+            </div>
+            <div className="confirm-msg" style={confirmDialog.requirePin ? { marginBottom: 12 } : undefined}>
+              {confirmDialog.message}
+            </div>
+            {confirmDialog.requirePin && (
+              <div style={{ marginBottom: 14 }}>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  autoFocus
+                  className={`pin-input ${confirmPinError ? 'invalid' : ''}`}
+                  placeholder={strings.passwordPlaceholder}
+                  value={confirmPinInput}
+                  onChange={(e) => {
+                    setConfirmPinInput(e.target.value);
+                    if (confirmPinError) setConfirmPinError(false);
+                  }}
+                />
+                {confirmPinError && <div className="pin-error-text">{strings.wrongPasswordError}</div>}
+              </div>
+            )}
             <div className="confirm-actions">
               <button
                 type="button"
@@ -1507,15 +1808,11 @@ export default function App() {
               >
                 {strings.cancelBtn}
               </button>
-              <button
-                type="button"
-                className="confirm-btn primary"
-                onClick={confirmDialog.onConfirm}
-              >
+              <button type="submit" className="confirm-btn primary">
                 {confirmDialog.confirmLabel || strings.confirmBtn}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -1540,6 +1837,68 @@ export default function App() {
         stationsCount={stations.length}
         stationsLabel={strings.stationsBtn}
         onOpenStations={() => setStationModalOpen(true)}
+        ownerSetupLabel={strings.ownerSetupBtn}
+        onOpenOwnerSetup={() => setAdminModalOpen(true)}
+        licenseLabel={strings.licenseBtn}
+        onOpenLicense={() => setLicenseModalOpen(true)}
+        supportWhatsApp={adminConfig.supportWhatsApp}
+        supportWhatsAppLabel={strings.whatsappSupportBtn}
+      />
+
+      {/* Password-Protected Station Owner Setup Modal */}
+      <AdminSettingsModal
+        open={adminModalOpen}
+        config={adminConfig}
+        strings={strings}
+        onSave={(nextConfig) => {
+          saveAdminConfig(nextConfig);
+          setAdminConfig(nextConfig);
+        }}
+        onPreviewSplash={(draftCfg) => {
+          setSplashPreview({ key: Date.now(), cfg: draftCfg });
+        }}
+        onNotify={(msg, kind) => showToast(msg, kind || '', 3000)}
+        onClose={() => setAdminModalOpen(false)}
+      />
+
+      {/* License Gate & Status Modal */}
+      <LicenseGateModal
+        open={licenseModalOpen || !licenseEval.unlocked}
+        evaluation={licenseEval}
+        stationName={stationName}
+        supportWhatsApp={adminConfig.supportWhatsApp}
+        strings={strings}
+        onUpdated={(nextEval) => setLicenseEval(nextEval)}
+        onOpenSellerStudio={() => setSellerStudioOpen(true)}
+        onNotify={(msg, kind) => showToast(msg, kind || '', 3000)}
+        onClose={() => setLicenseModalOpen(false)}
+      />
+
+      {/* Seller License Studio Modal */}
+      <SellerStudioModal
+        open={sellerStudioOpen}
+        currentDeviceId={licenseEval.deviceId}
+        onLicenseChanged={(nextEval) => setLicenseEval(nextEval)}
+        onNotify={(msg, kind) => showToast(msg, kind || '', 3000)}
+        onClose={() => setSellerStudioOpen(false)}
+      />
+
+      {/* Report Ad Gate (Free-with-Ads web/PWA fallback) */}
+      <AdGateModal
+        open={pendingAdExport !== null}
+        actionLabel={pendingAdExport?.label || ''}
+        brandName={adminConfig.brandName}
+        strings={strings}
+        onComplete={() => {
+          const run = pendingAdExport?.run;
+          setPendingAdExport(null);
+          run?.();
+        }}
+        onUpgradePro={() => {
+          setPendingAdExport(null);
+          setLicenseModalOpen(true);
+        }}
+        onClose={() => setPendingAdExport(null)}
       />
 
       {/* Camera OCR Modal */}
@@ -1563,6 +1922,7 @@ export default function App() {
       <HistoryModal
         open={historyOpen}
         items={historyItems}
+        currencyCode={adminConfig.currencyCode}
         strings={strings}
         onSelect={handleSelectHistory}
         onDeleteItem={handleDeleteHistoryItem}

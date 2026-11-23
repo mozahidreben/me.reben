@@ -2,22 +2,12 @@ import { useEffect, useState } from 'react';
 import { Lock, Trash2, X } from 'lucide-react';
 import type { HistoryShiftEntry } from '../types/reben.ts';
 import type { AppStrings } from '../data/appI18n.ts';
-
-const HISTORY_PIN_KEY = 'reben_history_pin';
-const DEFAULT_HISTORY_PIN = '1234';
-
-function getStoredPin(): string {
-  try {
-    const val = localStorage.getItem(HISTORY_PIN_KEY);
-    return val && val.trim() ? val.trim() : DEFAULT_HISTORY_PIN;
-  } catch {
-    return DEFAULT_HISTORY_PIN;
-  }
-}
+import { updateAdminPin, verifyAdminPin } from '../utils/adminConfig.ts';
 
 interface HistoryModalProps {
   open: boolean;
   items: HistoryShiftEntry[];
+  currencyCode?: string;
   strings: AppStrings;
   onSelect: (entry: HistoryShiftEntry) => void;
   onDeleteItem: (id: number) => void;
@@ -31,6 +21,7 @@ type PendingDelete = { type: 'single'; id: number } | { type: 'all' } | null;
 export function HistoryModal({
   open,
   items,
+  currencyCode = 'SAR',
   strings,
   onSelect,
   onDeleteItem,
@@ -81,7 +72,7 @@ export function HistoryModal({
   const handleConfirmDelete = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pendingDelete) return;
-    if (pinInput.trim() !== getStoredPin()) {
+    if (!verifyAdminPin(pinInput)) {
       setPinError(true);
       return;
     }
@@ -96,14 +87,10 @@ export function HistoryModal({
 
   const handleSaveNewPin = (e: React.FormEvent) => {
     e.preventDefault();
-    const next = newPinInput.trim();
-    if (currentPinInput.trim() !== getStoredPin() || next.length === 0) {
+    if (!updateAdminPin(currentPinInput, newPinInput)) {
       setChangeError(true);
       return;
     }
-    try {
-      localStorage.setItem(HISTORY_PIN_KEY, next);
-    } catch {}
     setChangeMode(false);
     setCurrentPinInput('');
     setNewPinInput('');
@@ -156,7 +143,7 @@ export function HistoryModal({
               <div className="history-item-station">{item.station}</div>
               <div className="history-item-bottom">
                 <div className="history-item-total" dir="ltr">
-                  {item.summary.total} SAR
+                  {item.summary.total} {currencyCode}
                 </div>
                 <button
                   type="button"

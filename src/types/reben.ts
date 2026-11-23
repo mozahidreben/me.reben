@@ -8,14 +8,17 @@ export interface FuelPrices {
   pk: string;
 }
 
-export interface AppPayments {
-  reben: string;   // ATM
-  petro: string;   // Reben APP
-  sayyara: string; // Petro APP
-  kafarat: string; // Sayyarah APP
-  vwallet: string; // Kafart Plus
-  car: string;     // V-Wallet
-  other: string;   // Other
+export interface PaymentMethodConfig {
+  id: string;
+  label: string;
+}
+
+export type AppPayments = Record<string, string>;
+
+export interface PaymentBreakdownItem {
+  id: string;
+  label: string;
+  amount: number;
 }
 
 export interface PaymentBreakdown {
@@ -29,6 +32,7 @@ export interface PaymentBreakdown {
   v: number;
   c: number;
   o: number;
+  items?: PaymentBreakdownItem[];
 }
 
 export interface NozzleItem {
@@ -50,6 +54,41 @@ export interface StationWorkspace {
   nozzles: NozzleItem[];
   isDayTime: boolean;
   updatedAt: number;
+}
+
+export type NozzleDeleteMode = 'allow' | 'pin' | 'block';
+export type NozzleAddMode = 'allow' | 'pin' | 'block';
+
+export interface AdminConfig {
+  brandName: string;
+  currencyCode: string;
+  sheetUrlOrId: string;
+  sheetSyncEnabled: boolean;
+  customLogoDataUrl: string;
+  supportWhatsApp: string;
+  splashEnabled: boolean;
+  splashShowName: boolean;
+  lockStationPrices: boolean;
+  lockNozzleMeta: boolean;
+  lockInitialWithPin: boolean;
+  lockShiftWithPin: boolean;
+  lockHistoryWithPin: boolean;
+  lockStationsManage: boolean;
+  nozzleAddMode: NozzleAddMode;
+  nozzleDeleteMode: NozzleDeleteMode;
+  paymentMethods: PaymentMethodConfig[];
+  reportAllowPdf: boolean;
+  reportAllowWhatsApp: boolean;
+  reportAllowExcel: boolean;
+  pdfShowNozzles: boolean;
+  pdfShowPayments: boolean;
+  pdfShowQr: boolean;
+  pdfShowSignatures: boolean;
+  pdfShowCredit: boolean;
+  pdfFooterNote: string;
+  waShowPayments: boolean;
+  waShowPrices: boolean;
+  waFooterNote: string;
 }
 
 export interface HistoryShiftEntry {
@@ -77,6 +116,40 @@ export interface HistoryShiftEntry {
   }>;
 }
 
+export type LicensePlan = 'trial' | 'free_ads' | 'monthly' | 'yearly' | 'lifetime';
+
+export type LicenseStatus =
+  | 'trial'
+  | 'trial_expired'
+  | 'free_ads'
+  | 'active'
+  | 'grace_expired'
+  | 'suspended'
+  | 'clock_tamper';
+
+export interface StoredLicenseState {
+  mode: 'sheet' | 'offline' | 'free_ads';
+  licenseKey: string;
+  plan: LicensePlan;
+  stationName?: string;
+  expiresAt: number; // 0 = lifetime
+  lastVerifiedAt: number;
+  status?: 'ACTIVE' | 'SUSPENDED';
+}
+
+export interface LicenseEvaluation {
+  unlocked: boolean;
+  status: LicenseStatus;
+  mode: 'trial' | 'free_ads' | 'sheet' | 'offline';
+  plan: LicensePlan;
+  daysLeft: number;
+  expiresAt: number;
+  deviceId: string;
+  licenseKey?: string;
+  stationName?: string;
+  isTrialWatermark: boolean;
+}
+
 declare global {
   interface Window {
     AndroidBridge?: {
@@ -85,8 +158,12 @@ declare global {
       shareWhatsApp: (text: string) => void;
       openUrl: (url: string) => void;
       setNightMode: (isNight: boolean) => void;
+      setAdsEnabled?: (enabled: boolean) => void;
+      showRewardedAd?: (placement: string, callbackName: string) => void;
+      showInterstitialAd?: (placement: string) => void;
     };
     webkitSpeechRecognition?: new () => any;
     SpeechRecognition?: new () => any;
   }
 }
+

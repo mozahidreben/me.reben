@@ -1,7 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Volume2, Square, Play, Gauge, X, AlertCircle, Plus, Minus, Mic, Camera, Sun, Moon, FileText, Share2, RefreshCw, MapPin } from 'lucide-react';
+import {
+  AlertCircle,
+  Camera,
+  FileText,
+  Gauge,
+  KeyRound,
+  Lock,
+  MapPin,
+  MessageCircle,
+  Mic,
+  Minus,
+  Moon,
+  Play,
+  Plus,
+  RefreshCw,
+  Share2,
+  Square,
+  Sun,
+  Volume2,
+  X,
+} from 'lucide-react';
 import { GUIDE_CONTENT, GUIDE_LANGS } from '../data/guideContent.ts';
 import type { GuideLang, GuideStepId } from '../data/guideContent.ts';
+import { formatWhatsAppSupportUrl } from '../utils/adminConfig.ts';
+import { openExternalUrl } from '../utils/rebenExport.ts';
 
 interface TutorialModalProps {
   open: boolean;
@@ -11,6 +33,12 @@ interface TutorialModalProps {
   stationsCount?: number;
   stationsLabel?: string;
   onOpenStations?: () => void;
+  ownerSetupLabel?: string;
+  onOpenOwnerSetup?: () => void;
+  licenseLabel?: string;
+  onOpenLicense?: () => void;
+  supportWhatsApp?: string;
+  supportWhatsAppLabel?: string;
 }
 
 const TOUR_SEQUENCE: GuideStepId[] = ['intro', '1', '2', '3', '4'];
@@ -23,8 +51,15 @@ export function TutorialModal({
   stationsCount = 1,
   stationsLabel = 'Stations',
   onOpenStations,
+  ownerSetupLabel = 'Setup',
+  onOpenOwnerSetup,
+  licenseLabel = 'License',
+  onOpenLicense,
+  supportWhatsApp = '',
+  supportWhatsAppLabel = 'WhatsApp Support',
 }: TutorialModalProps) {
   const copy = GUIDE_CONTENT[lang];
+  const dir = copy.rtl ? 'rtl' : 'ltr';
 
   // Voice guide state
   const [activeStep, setActiveStep] = useState<GuideStepId | null>(null);
@@ -39,7 +74,6 @@ export function TutorialModal({
   const audioCacheRef = useRef<Map<string, string>>(new Map());
   const inflightFetchRef = useRef<Map<string, Promise<string>>>(new Map());
   const tourCancelRef = useRef(false);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const stepCardRefs = useRef<Record<string, HTMLElement | null>>({});
 
   // Mini-screen animation states
@@ -91,7 +125,7 @@ export function TutorialModal({
     }
   }, []);
 
-  // Stop audio whenever modal closes
+  // Stop audio when modal closes
   useEffect(() => {
     if (!open) {
       stopAllAudio();
@@ -99,7 +133,7 @@ export function TutorialModal({
     }
   }, [open, stopAllAudio]);
 
-  // Revoke object URLs on unmount
+  // Cleanup cached object URLs on unmount
   useEffect(() => {
     const cache = audioCacheRef.current;
     return () => {
@@ -109,14 +143,23 @@ export function TutorialModal({
     };
   }, [stopAllAudio]);
 
-  // Update playback rate dynamically if toggled while playing
+  // Sync playback rate immediately if audio is playing
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.playbackRate = speechRate;
     }
   }, [speechRate]);
 
-  // Load pre-installed offline MP3 guide clip first (works with zero internet); fall back to API only if missing
+  // Auto-scroll highlighted step card into view while speaking
+  useEffect(() => {
+    if (activeStep && activeStep !== 'intro') {
+      const el = stepCardRefs.current[activeStep];
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [activeStep]);
+
   const fetchStepAudioUrl = useCallback(async (targetLang: GuideLang, step: GuideStepId): Promise<string> => {
     const key = `${targetLang}:${step}`;
     const existing = audioCacheRef.current.get(key);
@@ -126,6 +169,7 @@ export function TutorialModal({
     if (inflight) return inflight;
 
     const promise = (async () => {
+      // 1) Try pre-generated static offline audio file first (/audio/guide/<lang>/<step>.mp3)
       const staticPath = `/audio/guide/${targetLang}/${step}.mp3`;
       try {
         const localRes = await fetch(staticPath);
@@ -138,10 +182,9 @@ export function TutorialModal({
             return objectUrl;
           }
         }
-      } catch {
-        // Ignore and try API fallback if online
-      }
+      } catch {}
 
+      // 2) Fallback to live Gemini TTS API when online
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         throw new Error('Offline audio clip unavailable.');
       }
@@ -173,32 +216,20 @@ export function TutorialModal({
     }
   }, []);
 
-  // Preload intro and step 1 locally when guide opens or language changes
+  // Pre-warm intro & step 1 for current language when modal opens
   useEffect(() => {
     if (!open) return;
     fetchStepAudioUrl(lang, 'intro').catch(() => {});
     fetchStepAudioUrl(lang, '1').catch(() => {});
   }, [open, lang, fetchStepAudioUrl]);
 
-  const scrollStepIntoView = useCallback((step: GuideStepId) => {
-    if (step === 'intro') {
-      scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    const card = stepCardRefs.current[step];
-    if (card) {
-      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, []);
-
   const playSingleStep = useCallback(
     async (step: GuideStepId, partOfTour = false): Promise<boolean> => {
       setVoiceError(null);
       setUsingBrowserVoice(false);
       setLoadingStep(step);
-      scrollStepIntoView(step);
 
-      // Prefetch next step if running tour
+      // Preload next step in background during tour
       if (partOfTour) {
         const idx = TOUR_SEQUENCE.indexOf(step);
         const nextStep = TOUR_SEQUENCE[idx + 1];
@@ -248,7 +279,7 @@ export function TutorialModal({
         return false;
       }
     },
-    [fetchStepAudioUrl, lang, scrollStepIntoView, speechRate]
+    [fetchStepAudioUrl, lang, speechRate]
   );
 
   const handleToggleFullTour = useCallback(async () => {
@@ -262,7 +293,6 @@ export function TutorialModal({
       if (tourCancelRef.current) break;
       const ok = await playSingleStep(step, true);
       if (!ok || tourCancelRef.current) break;
-      // Short gentle pause between steps
       await new Promise((r) => setTimeout(r, 450));
     }
     if (!tourCancelRef.current) {
@@ -284,7 +314,7 @@ export function TutorialModal({
     [activeStep, loadingStep, playSingleStep, stopAllAudio]
   );
 
-  // Explicit user-triggered device speech fallback if Gemini TTS has an error
+  // Optional browser SpeechSynthesis fallback if offline or API fails
   const handleBrowserSpeechFallback = useCallback(
     (stepToRead: GuideStepId = '1') => {
       if (!('speechSynthesis' in window)) {
@@ -313,7 +343,6 @@ export function TutorialModal({
       );
       if (femaleMatch) utter.voice = femaleMatch;
       setActiveStep(stepToRead);
-      scrollStepIntoView(stepToRead);
       utter.onend = () => {
         setActiveStep(null);
         setUsingBrowserVoice(false);
@@ -324,7 +353,7 @@ export function TutorialModal({
       };
       window.speechSynthesis.speak(utter);
     },
-    [copy.scripts, lang, scrollStepIntoView, speechRate, stopAllAudio]
+    [copy.scripts, lang, speechRate, stopAllAudio]
   );
 
   const handleLanguageSelect = (newLang: GuideLang) => {
@@ -333,7 +362,6 @@ export function TutorialModal({
     onChangeLang(newLang);
   };
 
-  // Animated mini-screens when modal is open
   useEffect(() => {
     if (!open) return;
     const timers: number[] = [];
@@ -343,72 +371,72 @@ export function TutorialModal({
 
     const runDemo1 = () => {
       setDemo1({ hl: '', name: '', p91: '0.00', p95: '0.00', pd: '0.00' });
-      later(() => setDemo1((s) => ({ ...s, hl: 'name' })), 300);
+      later(() => setDemo1((s) => ({ ...s, hl: 'name' })), 250);
       const station = 'RIYADH 12';
       for (let i = 1; i <= station.length; i++) {
-        later(() => setDemo1((s) => ({ ...s, name: station.slice(0, i) })), 500 + i * 90);
+        later(() => setDemo1((s) => ({ ...s, name: station.slice(0, i) })), 400 + i * 85);
       }
-      later(() => setDemo1((s) => ({ ...s, hl: 'p91' })), 1800);
-      later(() => setDemo1((s) => ({ ...s, p91: '2.18' })), 2300);
-      later(() => setDemo1((s) => ({ ...s, hl: 'p95' })), 2900);
-      later(() => setDemo1((s) => ({ ...s, p95: '2.33' })), 3400);
-      later(() => setDemo1((s) => ({ ...s, hl: 'pd' })), 4000);
-      later(() => setDemo1((s) => ({ ...s, pd: '1.66' })), 4500);
-      later(() => setDemo1((s) => ({ ...s, hl: '' })), 5100);
-      later(runDemo1, 6600);
+      later(() => setDemo1((s) => ({ ...s, hl: 'p91' })), 1600);
+      later(() => setDemo1((s) => ({ ...s, p91: '2.18' })), 2050);
+      later(() => setDemo1((s) => ({ ...s, hl: 'p95' })), 2600);
+      later(() => setDemo1((s) => ({ ...s, p95: '2.33' })), 3050);
+      later(() => setDemo1((s) => ({ ...s, hl: 'pd' })), 3600);
+      later(() => setDemo1((s) => ({ ...s, pd: '1.66' })), 4050);
+      later(() => setDemo1((s) => ({ ...s, hl: '' })), 4600);
+      later(runDemo1, 6100);
     };
 
     const runDemo2 = () => {
       setDemo2({ hl: '', ini: '', fin: '', scan: false, sales: false });
-      later(() => setDemo2((s) => ({ ...s, hl: 'ini' })), 300);
+      later(() => setDemo2((s) => ({ ...s, hl: 'ini' })), 250);
       const ini = '125430.5';
       for (let i = 1; i <= ini.length; i++) {
-        later(() => setDemo2((s) => ({ ...s, ini: ini.slice(0, i) })), 500 + i * 110);
+        later(() => setDemo2((s) => ({ ...s, ini: ini.slice(0, i) })), 400 + i * 95);
       }
-      later(() => setDemo2((s) => ({ ...s, hl: 'cam' })), 2100);
-      later(() => setDemo2((s) => ({ ...s, scan: true })), 2700);
-      later(() => setDemo2((s) => ({ ...s, scan: false, hl: 'fin' })), 4100);
+      later(() => setDemo2((s) => ({ ...s, hl: 'cam' })), 1800);
+      later(() => setDemo2((s) => ({ ...s, scan: true })), 2300);
+      later(() => setDemo2((s) => ({ ...s, scan: false, hl: 'fin' })), 3600);
       const fin = '125980.2';
       for (let i = 1; i <= fin.length; i++) {
-        later(() => setDemo2((s) => ({ ...s, fin: fin.slice(0, i) })), 4200 + i * 70);
+        later(() => setDemo2((s) => ({ ...s, fin: fin.slice(0, i) })), 3700 + i * 65);
       }
-      later(() => setDemo2((s) => ({ ...s, hl: '', sales: true })), 5100);
-      later(runDemo2, 7600);
+      later(() => setDemo2((s) => ({ ...s, hl: '', sales: true })), 4600);
+      later(runDemo2, 6800);
     };
 
     const runDemo3 = () => {
       setDemo3({ hl: '', open: false, atm: '0', reb: '0', cash: '0.00', pop: false });
-      later(() => setDemo3((s) => ({ ...s, hl: 'btn' })), 300);
-      later(() => setDemo3((s) => ({ ...s, open: true, hl: '' })), 1000);
-      later(() => setDemo3((s) => ({ ...s, hl: 'atm' })), 1700);
+      later(() => setDemo3((s) => ({ ...s, hl: 'btn' })), 250);
+      later(() => setDemo3((s) => ({ ...s, open: true, hl: '' })), 850);
+      later(() => setDemo3((s) => ({ ...s, hl: 'atm' })), 1500);
       const atm = '1200';
       for (let i = 1; i <= atm.length; i++) {
-        later(() => setDemo3((s) => ({ ...s, atm: atm.slice(0, i) })), 1800 + i * 150);
+        later(() => setDemo3((s) => ({ ...s, atm: atm.slice(0, i) })), 1600 + i * 130);
       }
-      later(() => setDemo3((s) => ({ ...s, hl: 'reb' })), 2900);
+      later(() => setDemo3((s) => ({ ...s, hl: 'reb' })), 2500);
       const reb = '350';
       for (let i = 1; i <= reb.length; i++) {
-        later(() => setDemo3((s) => ({ ...s, reb: reb.slice(0, i) })), 3000 + i * 150);
+        later(() => setDemo3((s) => ({ ...s, reb: reb.slice(0, i) })), 2600 + i * 130);
       }
-      later(() => setDemo3((s) => ({ ...s, hl: '', cash: '1,985.30', pop: true })), 4100);
-      later(() => setDemo3((s) => ({ ...s, pop: false })), 4500);
-      later(runDemo3, 7000);
+      later(() => setDemo3((s) => ({ ...s, hl: '', cash: '1,985.30', pop: true })), 3500);
+      later(() => setDemo3((s) => ({ ...s, pop: false })), 3900);
+      later(runDemo3, 6200);
     };
 
     const runDemo4 = () => {
       setDemo4({ hl: '', toast: false, night: false });
-      later(() => setDemo4((s) => ({ ...s, hl: 'wa' })), 300);
-      later(() => setDemo4((s) => ({ ...s, toast: true, hl: '' })), 1100);
-      later(() => setDemo4((s) => ({ ...s, toast: false })), 3000);
-      later(() => setDemo4((s) => ({ ...s, hl: 'shift' })), 3300);
-      later(() => setDemo4((s) => ({ ...s, hl: '', night: true })), 4200);
-      later(runDemo4, 7200);
+      later(() => setDemo4((s) => ({ ...s, hl: 'wa' })), 250);
+      later(() => setDemo4((s) => ({ ...s, toast: true, hl: '' })), 950);
+      later(() => setDemo4((s) => ({ ...s, toast: false })), 2700);
+      later(() => setDemo4((s) => ({ ...s, hl: 'shift' })), 3000);
+      later(() => setDemo4((s) => ({ ...s, hl: '', night: true })), 3800);
+      later(runDemo4, 6400);
     };
 
     runDemo1();
-    runDemo2();
-    runDemo3();
-    runDemo4();
+    later(runDemo2, 400);
+    later(runDemo3, 800);
+    later(runDemo4, 1200);
 
     return () => {
       timers.forEach((id) => window.clearTimeout(id));
@@ -418,17 +446,17 @@ export function TutorialModal({
   if (!open) return null;
 
   const isSpeakingAnything = activeStep !== null || loadingStep !== null;
-  const dir = copy.rtl ? 'rtl' : 'ltr';
+  const whatsappUrl = formatWhatsAppSupportUrl(supportWhatsApp);
 
-  const renderStepAudioButton = (stepId: GuideStepId) => {
-    const isThisPlaying = activeStep === stepId;
-    const isThisLoading = loadingStep === stepId;
+  const renderStepAudioButton = (step: '1' | '2' | '3' | '4') => {
+    const isThisPlaying = activeStep === step;
+    const isThisLoading = loadingStep === step;
     return (
       <button
         type="button"
-        onClick={() => handleListenStep(stepId)}
+        onClick={() => handleListenStep(step)}
         className={`tut-listen-btn ${isThisPlaying ? 'playing' : ''} ${isThisLoading ? 'loading' : ''}`}
-        aria-label={`${copy.listenStep} ${stepId}`}
+        aria-label={`${copy.listenStep} ${step}`}
       >
         {isThisLoading ? (
           <>
@@ -461,32 +489,57 @@ export function TutorialModal({
       style={{ display: 'flex' }}
     >
       <div className="tut-head" dir={dir}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="tut-title">{copy.title}</div>
-          <div className="tut-sub">{copy.sub}</div>
-        </div>
         <div className="tut-head-actions">
-          {onOpenStations && (
-            <button
-              type="button"
-              className="tut-station-btn"
-              onClick={() => {
-                onClose();
-                onOpenStations();
-              }}
-              aria-label={stationsLabel}
-            >
-              <MapPin className="w-3.5 h-3.5 text-[var(--reben-red)]" />
-              <span>{stationsCount > 1 ? `${stationsLabel} (${stationsCount})` : stationsLabel}</span>
-            </button>
-          )}
+          <div className="tut-head-pills">
+            {onOpenStations && (
+              <button
+                className="tut-station-btn"
+                onClick={() => {
+                  onClose();
+                  onOpenStations();
+                }}
+                type="button"
+              >
+                <MapPin className="w-3.5 h-3.5 text-[var(--reben-red)]" />
+                <span>{stationsLabel}</span>
+                {stationsCount > 1 && <span className="tut-station-pill">{stationsCount}</span>}
+              </button>
+            )}
+            {onOpenOwnerSetup && (
+              <button
+                className="tut-station-btn"
+                onClick={() => {
+                  onClose();
+                  onOpenOwnerSetup();
+                }}
+                type="button"
+              >
+                <Lock className="w-3.5 h-3.5 text-slate-600" />
+                <span>{ownerSetupLabel}</span>
+              </button>
+            )}
+            {onOpenLicense && (
+              <button
+                className="tut-station-btn"
+                onClick={() => {
+                  onClose();
+                  onOpenLicense();
+                }}
+                type="button"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-[#059669]" />
+                <span>{licenseLabel}</span>
+              </button>
+            )}
+          </div>
           <button className="tut-x" onClick={onClose} aria-label="Close" type="button">
             <X className="w-5 h-5" />
           </button>
         </div>
+        <h2 className="tut-title">{copy.title}</h2>
       </div>
 
-      <div className="tut-langs" role="group" aria-label="Language">
+      <div className="tut-langs">
         {GUIDE_LANGS.map((code) => (
           <button
             key={code}
@@ -499,19 +552,19 @@ export function TutorialModal({
         ))}
       </div>
 
-      {/* Clean Voice Guide Bar */}
+      {/* Friendly Female Voice Companion Bar */}
       <div className="tut-voice-bar" dir={dir}>
         <div className="tut-voice-top">
           <div className="tut-voice-persona">
             <div className={`tut-avatar ${activeStep ? 'speaking' : ''}`} aria-hidden="true">
-              <Volume2 className="w-4 h-4" />
+              <Volume2 className="w-5 h-5" />
             </div>
             <div className="tut-voice-meta">
               <div className="tut-voice-title">{copy.voiceBannerTitle}</div>
               <div className="tut-voice-sub">
                 {activeStep
-                  ? `${copy.speakingPrefix}${usingBrowserVoice ? ' (Device)' : ''} · ${
-                      activeStep === 'intro' ? copy.voiceBannerTitle : `${activeStep}/4`
+                  ? `${copy.speakingPrefix}${usingBrowserVoice ? ' (Device Voice)' : ''} · ${
+                      activeStep === 'intro' ? 'Intro' : `Step ${activeStep}`
                     }`
                   : loadingStep
                   ? copy.loadingVoice
@@ -585,15 +638,15 @@ export function TutorialModal({
         )}
       </div>
 
-      <div className="tut-scroll" ref={scrollContainerRef}>
+      <div className="tut-scroll" dir={dir}>
         {/* STEP 1 */}
         <section
-          className={`tut-step ${activeStep === '1' ? 'tut-step-active' : ''}`}
           ref={(el) => {
             stepCardRefs.current['1'] = el;
           }}
+          className={`tut-step ${activeStep === '1' ? 'tut-step-active' : ''}`}
         >
-          <div className="tut-step-head" dir={dir}>
+          <div className="tut-step-head">
             <div className="tut-num">1</div>
             <div className="tut-step-text">
               <h3>{copy.s1t}</h3>
@@ -601,7 +654,7 @@ export function TutorialModal({
             </div>
             {renderStepAudioButton('1')}
           </div>
-          <div className="tut-screen tut-demo">
+          <div className="tut-screen tut-demo" dir="ltr">
             <span className="tut-chip">{copy.example}</span>
             <div className="mini-card">
               <div className={`mini-name mini-mono ${demo1.hl === 'name' ? 'hl' : ''}`}>
@@ -630,12 +683,12 @@ export function TutorialModal({
 
         {/* STEP 2 */}
         <section
-          className={`tut-step ${activeStep === '2' ? 'tut-step-active' : ''}`}
           ref={(el) => {
             stepCardRefs.current['2'] = el;
           }}
+          className={`tut-step ${activeStep === '2' ? 'tut-step-active' : ''}`}
         >
-          <div className="tut-step-head" dir={dir}>
+          <div className="tut-step-head">
             <div className="tut-num">2</div>
             <div className="tut-step-text">
               <h3>{copy.s2t}</h3>
@@ -643,7 +696,7 @@ export function TutorialModal({
             </div>
             {renderStepAudioButton('2')}
           </div>
-          <div className="tut-screen tut-demo">
+          <div className="tut-screen tut-demo" dir="ltr">
             <span className="tut-chip">{copy.example}</span>
             <div className="mini-nozzle">
               <div className="mini-nz-head">
@@ -683,12 +736,12 @@ export function TutorialModal({
 
         {/* STEP 3 */}
         <section
-          className={`tut-step ${activeStep === '3' ? 'tut-step-active' : ''}`}
           ref={(el) => {
             stepCardRefs.current['3'] = el;
           }}
+          className={`tut-step ${activeStep === '3' ? 'tut-step-active' : ''}`}
         >
-          <div className="tut-step-head" dir={dir}>
+          <div className="tut-step-head">
             <div className="tut-num">3</div>
             <div className="tut-step-text">
               <h3>{copy.s3t}</h3>
@@ -696,7 +749,7 @@ export function TutorialModal({
             </div>
             {renderStepAudioButton('3')}
           </div>
-          <div className="tut-screen tut-demo">
+          <div className="tut-screen tut-demo" dir="ltr">
             <span className="tut-chip">{copy.example}</span>
             <div className="mini-card">
               <div className="mini-topbar">
@@ -733,12 +786,12 @@ export function TutorialModal({
 
         {/* STEP 4 */}
         <section
-          className={`tut-step ${activeStep === '4' ? 'tut-step-active' : ''}`}
           ref={(el) => {
             stepCardRefs.current['4'] = el;
           }}
+          className={`tut-step ${activeStep === '4' ? 'tut-step-active' : ''}`}
         >
-          <div className="tut-step-head" dir={dir}>
+          <div className="tut-step-head">
             <div className="tut-num">4</div>
             <div className="tut-step-text">
               <h3>{copy.s4t}</h3>
@@ -746,13 +799,13 @@ export function TutorialModal({
             </div>
             {renderStepAudioButton('4')}
           </div>
-          <div className={`tut-screen tut-demo ${demo4.night ? 'night' : ''}`}>
+          <div className={`tut-screen tut-demo ${demo4.night ? 'night' : ''}`} dir="ltr">
             <span className="tut-chip">{copy.example}</span>
             <div className={`mini-toast ${demo4.toast ? 'on' : ''}`}>
               <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0 fill-[#25D366]" aria-hidden="true">
                 <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm5.79 14.08c-.24.68-1.41 1.3-1.95 1.38-.52.08-1.18.11-1.9-.12-.44-.14-1-.33-1.72-.64-3.03-1.31-5.01-4.37-5.16-4.57-.15-.2-1.23-1.64-1.23-3.13 0-1.49.78-2.22 1.06-2.52.28-.3.6-.38.8-.38.2 0 .4 0 .58.01.19.01.44-.07.69.53.25.61.86 2.1.94 2.25.08.15.13.33.03.53-.1.2-.15.33-.3.5-.15.18-.32.4-.45.53-.15.15-.3.31-.13.61.18.3.79 1.3 1.7 2.11 1.17 1.04 2.15 1.36 2.45 1.51.3.15.48.13.65-.08.18-.2.75-.88.95-1.18.2-.3.4-.25.68-.15.28.1 1.76.83 2.06.98.3.15.5.23.58.35.07.13.07.73-.17 1.41z" />
               </svg>
-              <span>Report sent to WhatsApp ✓</span>
+              <span>Report sent to WhatsApp</span>
             </div>
             <div className="mini-spacer" />
             <div className="mini-footer">
@@ -787,10 +840,22 @@ export function TutorialModal({
         </section>
       </div>
 
-      <div className="tut-foot">
-        <button className="tut-ok" onClick={onClose} type="button">
-          {copy.ok}
-        </button>
+      <div className="tut-foot" dir={dir}>
+        <div className="tut-foot-actions">
+          {whatsappUrl && (
+            <button
+              type="button"
+              className="tut-wa-support"
+              onClick={() => openExternalUrl(whatsappUrl)}
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>{supportWhatsAppLabel}</span>
+            </button>
+          )}
+          <button className="tut-ok" onClick={onClose} type="button">
+            {copy.ok}
+          </button>
+        </div>
       </div>
     </div>
   );

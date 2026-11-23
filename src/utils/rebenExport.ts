@@ -3,6 +3,8 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import qrcode from 'qrcode-generator';
 import type { FuelPrices, FuelType, NozzleItem, PaymentBreakdown } from '../types/reben.ts';
+import { DEFAULT_GOOGLE_SHEET_URL, getAdminConfig, resolveSheetUrl } from './adminConfig.ts';
+import { getLicenseWatermarkText } from './license.ts';
 
 interface QrInstance {
   addData(data: string, mode?: string): void;
@@ -15,10 +17,7 @@ type JsPDFWithAutoTable = jsPDF & {
   lastAutoTable?: { finalY: number };
 };
 
-export const GOOGLE_SHEET_URL =
-  'https://script.google.com/macros/s/AKfycbyLrGK3QJ2OJbA421kNuY68KLjSjkAVqm7GDdnctrTaRPwpjlwXORv6PyWc14Uek-Qfpg/exec';
-
-export const REPORT_API_URL = GOOGLE_SHEET_URL;
+export const GOOGLE_SHEET_URL = DEFAULT_GOOGLE_SHEET_URL;
 export const REPORT_QUEUE_KEY = 'reben_report_queue';
 
 export const IS_ANDROID_APP = typeof window !== 'undefined' && typeof window.AndroidBridge !== 'undefined';
@@ -76,40 +75,55 @@ export function openExternalUrl(url: string) {
   }
 }
 
+let cachedLogoKey = '';
 let cachedLogoInfo: { dataUrl: string; aspectRatio: number } | null = null;
 
 export function loadCompanyLogo(): Promise<{ dataUrl: string; aspectRatio: number } | null> {
+  const customDataUrl = getAdminConfig().customLogoDataUrl.trim();
+  const primarySrc = customDataUrl || '/logo.png';
+  const cacheKey = customDataUrl ? `custom:${customDataUrl.length}:${customDataUrl.slice(0, 48)}` : 'default:/logo.png';
+
   return new Promise((resolve) => {
-    if (cachedLogoInfo) return resolve(cachedLogoInfo);
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = () => {
-      try {
-        const w = img.naturalWidth || img.width;
-        const h = img.naturalHeight || img.height;
-        const MAX_LOGO_PX = 480;
-        const scale = Math.min(1, MAX_LOGO_PX / Math.max(w, h));
-        const cw = Math.max(1, Math.round(w * scale));
-        const ch = Math.max(1, Math.round(h * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = cw;
-        canvas.height = ch;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return resolve(null);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, cw, ch);
-        cachedLogoInfo = {
-          dataUrl: canvas.toDataURL('image/png'),
-          aspectRatio: w && h ? w / h : 1,
-        };
-        resolve(cachedLogoInfo);
-      } catch {
-        resolve(null);
-      }
+    if (cachedLogoInfo && cachedLogoKey === cacheKey) return resolve(cachedLogoInfo);
+    const loadSrc = (src: string, allowFallback: boolean) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        try {
+          const w = img.naturalWidth || img.width;
+          const h = img.naturalHeight || img.height;
+          const MAX_LOGO_PX = 480;
+          const scale = Math.min(1, MAX_LOGO_PX / Math.max(w, h));
+          const cw = Math.max(1, Math.round(w * scale));
+          const ch = Math.max(1, Math.round(h * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = cw;
+          canvas.height = ch;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(null);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, cw, ch);
+          cachedLogoInfo = {
+            dataUrl: canvas.toDataURL('image/png'),
+            aspectRatio: w && h ? w / h : 1,
+          };
+          cachedLogoKey = cacheKey;
+          resolve(cachedLogoInfo);
+        } catch {
+          resolve(null);
+        }
+      };
+      img.onerror = () => {
+        if (allowFallback && src !== '/pwa-192x192.png') {
+          loadSrc('/pwa-192x192.png', false);
+        } else {
+          resolve(null);
+        }
+      };
+      img.src = src;
     };
-    img.onerror = () => resolve(null);
-    img.src = '/logo.png';
+    loadSrc(primarySrc, !customDataUrl);
   });
 }
 
@@ -124,12 +138,32 @@ function fpNum(x: unknown): string {
   return (Number(x) || 0).toFixed(2);
 }
 
+function getDigitalPaymentRows(payments: PaymentBreakdown): Array<{ label: string; amount: number }> {
+  if (Array.isArray(payments.items)) {
+    return payments.items
+      .map((it) => ({
+        label: cleanText(it.label, 32) || cleanText(it.id, 16) || 'Payment',
+        amount: Number(it.amount) || 0,
+      }))
+      .filter((it) => it.amount > 0);
+  }
+  const rows: Array<{ label: string; amount: number }> = [];
+  if (payments.r > 0) rows.push({ label: 'ATM', amount: payments.r });
+  if (payments.p > 0) rows.push({ label: 'Reben APP', amount: payments.p });
+  if (payments.s > 0) rows.push({ label: 'Petro APP', amount: payments.s });
+  if (payments.k > 0) rows.push({ label: 'Sayyarah APP', amount: payments.k });
+  if (payments.v > 0) rows.push({ label: 'Kafart Plus', amount: payments.v });
+  if (payments.c > 0) rows.push({ label: 'V-Wallet', amount: payments.c });
+  if (payments.o > 0) rows.push({ label: 'Other', amount: payments.o });
+  return rows;
+}
+
 export function reportFingerprint(d: {
   station: string;
   reportDate: string;
   shift: string;
   prices: Record<string, number>;
-  payments: Record<string, number>;
+  payments: Record<string, unknown>;
   total: number;
   cash: number;
   totalLiters: number;
@@ -158,6 +192,16 @@ export function reportFingerprint(d: {
     fpNum(d.cash),
     fpNum(d.totalLiters),
   ];
+  if (Array.isArray(pay.items)) {
+    pay.items.forEach((it) => {
+      if (it && typeof it === 'object') {
+        const obj = it as { id?: unknown; label?: unknown; amount?: unknown };
+        parts.push(
+          `${cleanText(obj.id, 24)}:${cleanText(obj.label, 32)}:${fpNum(obj.amount)}`
+        );
+      }
+    });
+  }
   (d.nozzles || []).forEach((z) => {
     parts.push(`${String(z.name || '').trim()}:${String(z.type || '')}:${fpNum(z.init)}:${fpNum(z.final)}`);
   });
@@ -191,7 +235,10 @@ export function makeReportToken(): string {
 }
 
 export function reportApiReady(): boolean {
-  return /^https:\/\/script\.google\.com\/macros\/s\/[^\s?#]+\/exec$/.test(REPORT_API_URL);
+  const cfg = getAdminConfig();
+  if (!cfg.sheetSyncEnabled) return false;
+  const apiUrl = resolveSheetUrl(cfg.sheetUrlOrId);
+  return /^https:\/\/script\.google\.com\/macros\/s\/[^\s?#]+\/exec$/.test(apiUrl);
 }
 
 interface QueuedReport {
@@ -217,6 +264,7 @@ let reportFlushing = false;
 
 export async function flushReportQueue(onToast?: (msg: string, kind: '' | 'ok' | 'warn', ms?: number) => void) {
   if (reportFlushing || !reportApiReady()) return;
+  const targetUrl = resolveSheetUrl();
   const queue = getReportQueue();
   if (!queue.length) return;
   if (!navigator.onLine) {
@@ -234,7 +282,7 @@ export async function flushReportQueue(onToast?: (msg: string, kind: '' | 'ok' |
       try {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 25000);
-        const res = await fetch(REPORT_API_URL, {
+        const res = await fetch(targetUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify(item.payload),
@@ -282,12 +330,13 @@ export function queueReport(
 export function shareWhatsAppReport(params: {
   station: string;
   isDayTime: boolean;
+  prices?: FuelPrices;
   nozzles: NozzleItem[];
   sums: Record<FuelType, number>;
   grandTotalFormatted: string;
   payments: PaymentBreakdown;
 }) {
-  const { station, isDayTime, nozzles, sums, grandTotalFormatted, payments } = params;
+  const { station, isDayTime, prices, nozzles, sums, grandTotalFormatted, payments } = params;
   const shift = isDayTime ? 'Day' : 'Night';
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -296,33 +345,54 @@ export function shareWhatsAppReport(params: {
   const yesterdayDateStr = formatDate(yesterday);
   const todayDateStr = formatDate(now);
 
+  const adminCfg = getAdminConfig();
+  const currency = cleanText(adminCfg.currencyCode, 8) || 'SAR';
+  const brandTitle = cleanText(adminCfg.brandName, 50) || 'Reben';
+  const customWaFooter = cleanText(adminCfg.waFooterNote, 120);
+
   let msg = `*⛽Station Report*%0A%0A`;
   msg += `    *${station}*%0A`;
   msg += `     Date ${!isDayTime ? yesterdayDateStr : todayDateStr}%0A`;
   msg += `     Shift - ${shift}%0A`;
   msg += `     Reporting Time - ${timeStr}%0A%0A`;
+
+  if (adminCfg.waShowPrices && prices) {
+    const priceLines: string[] = [];
+    if (isFuelUsed(nozzles, '91')) priceLines.push(`91: ${(parseFloat(prices.p91) || 0).toFixed(2)}`);
+    if (isFuelUsed(nozzles, '95')) priceLines.push(`95: ${(parseFloat(prices.p95) || 0).toFixed(2)}`);
+    if (isFuelUsed(nozzles, '98')) priceLines.push(`98: ${(parseFloat(prices.p98) || 0).toFixed(2)}`);
+    if (isFuelUsed(nozzles, 'D')) priceLines.push(`D: ${(parseFloat(prices.pd) || 0).toFixed(2)}`);
+    if (isFuelUsed(nozzles, 'K')) priceLines.push(`K: ${(parseFloat(prices.pk) || 0).toFixed(2)}`);
+    if (priceLines.length > 0) {
+      msg += `---- PRICES (${currency}) ----%0A`;
+      msg += `     ${priceLines.join('  |  ')}%0A%0A`;
+    }
+  }
+
   msg += `---- SUMMARY ----%0A%0A`;
   if (isFuelUsed(nozzles, '91')) msg += ` *🟢91 Total:* ${sums['91'].toFixed(2)} L%0A`;
   if (isFuelUsed(nozzles, '95')) msg += ` *🔴95 Total:* ${sums['95'].toFixed(2)} L%0A`;
   if (isFuelUsed(nozzles, '98')) msg += ` *🟣98 Total:* ${sums['98'].toFixed(2)} L%0A`;
   if (isFuelUsed(nozzles, 'D')) msg += ` *🟡D   Total:* ${sums['D'].toFixed(2)} L%0A`;
   if (isFuelUsed(nozzles, 'K')) msg += ` *🔵K   Total:* ${sums['K'].toFixed(2)} L%0A`;
-  msg += ` *💰Total Amount:* ${grandTotalFormatted} SAR%0A%0A`;
+  msg += ` *💰Total Amount:* ${grandTotalFormatted} ${currency}%0A%0A`;
 
-  msg += `---- PAYMENTS ----%0A`;
-  if (payments.r > 0) msg += `     ATM: ${payments.r.toFixed(2)} SAR%0A`;
-  if (payments.p > 0) msg += `     Reben APP: ${payments.p.toFixed(2)} SAR%0A`;
-  if (payments.s > 0) msg += `     Petro APP: ${payments.s.toFixed(2)} SAR%0A`;
-  if (payments.k > 0) msg += `     Sayyarah APP: ${payments.k.toFixed(2)} SAR%0A`;
-  if (payments.v > 0) msg += `     Kafart Plus: ${payments.v.toFixed(2)} SAR%0A`;
-  if (payments.c > 0) msg += `     V-Wallet: ${payments.c.toFixed(2)} SAR%0A`;
-  if (payments.o > 0) msg += `     Other: ${payments.o.toFixed(2)} SAR%0A`;
-  msg += `    *CASH💸:* ${payments.cash.toFixed(2)} SAR%0A%0A`;
+  if (adminCfg.waShowPayments) {
+    msg += `---- PAYMENTS ----%0A`;
+    getDigitalPaymentRows(payments).forEach((row) => {
+      msg += `     ${row.label}: ${row.amount.toFixed(2)} ${currency}%0A`;
+    });
+    msg += `    *CASH💸:* ${payments.cash.toFixed(2)} ${currency}%0A%0A`;
+  }
 
   if (!isDayTime) {
     msg += `*Note* - Closing reading recorded%0A     ${todayDateStr} Morning Time%0A%0A`;
   }
-  msg += `*Thank you for being part of Reben!*`;
+  const wmText = getLicenseWatermarkText();
+  if (wmText) {
+    msg += `_${wmText}_%0A`;
+  }
+  msg += `*${customWaFooter || `Thank you for being part of ${brandTitle}!`}*`;
   openExternalUrl(`https://wa.me/?text=${msg}`);
 }
 
@@ -342,6 +412,7 @@ export function exportExcelReport(params: {
   const hasD = isFuelUsed(nozzles, 'D');
   const hasK = isFuelUsed(nozzles, 'K');
 
+  const currency = cleanText(getAdminConfig().currencyCode, 8) || 'SAR';
   const headerInfo = [
     ['STATION', station],
     ['DATE', getTopDateStr(isDayTime)],
@@ -351,10 +422,10 @@ export function exportExcelReport(params: {
     ...(has98 ? [['98 PRICE', prices.p98]] : []),
     ...(hasD ? [['D PRICE', prices.pd]] : []),
     ...(hasK ? [['KEROSENE PRICE', prices.pk]] : []),
-    ['GRAND TOTAL', `${grandTotalFormatted} SAR`],
+    ['GRAND TOTAL', `${grandTotalFormatted} ${currency}`],
     [],
     ['FUEL SUMMARY'],
-    ['Fuel', 'Liters', 'SAR'],
+    ['Fuel', 'Liters', currency],
     ...(has91 ? [['91', sums['91'].toFixed(2), (sums['91'] * (parseFloat(prices.p91) || 0)).toFixed(2)]] : []),
     ...(has95 ? [['95', sums['95'].toFixed(2), (sums['95'] * (parseFloat(prices.p95) || 0)).toFixed(2)]] : []),
     ...(has98 ? [['98', sums['98'].toFixed(2), (sums['98'] * (parseFloat(prices.p98) || 0)).toFixed(2)]] : []),
@@ -363,13 +434,7 @@ export function exportExcelReport(params: {
     [],
     ['PAYMENTS'],
     ['Type', 'Amount'],
-    ...(payments.r > 0 ? [['ATM', payments.r.toFixed(2)]] : []),
-    ...(payments.p > 0 ? [['Reben APP', payments.p.toFixed(2)]] : []),
-    ...(payments.s > 0 ? [['Petro APP', payments.s.toFixed(2)]] : []),
-    ...(payments.k > 0 ? [['Sayyarah APP', payments.k.toFixed(2)]] : []),
-    ...(payments.v > 0 ? [['Kafart Plus', payments.v.toFixed(2)]] : []),
-    ...(payments.c > 0 ? [['V-Wallet', payments.c.toFixed(2)]] : []),
-    ...(payments.o > 0 ? [['Other', payments.o.toFixed(2)]] : []),
+    ...getDigitalPaymentRows(payments).map((row) => [row.label, row.amount.toFixed(2)]),
     ['TOTAL DIGITAL PAYMENTS', payments.appsTotal.toFixed(2)],
     ['CASH', payments.cash.toFixed(2)],
     [],
@@ -490,6 +555,7 @@ export async function exportPdfReport(params: {
       c: payments.c,
       o: payments.o,
       appsTotal: payments.appsTotal,
+      items: payments.items,
     },
     total: payments.total,
     cash: payments.cash,
@@ -497,29 +563,36 @@ export async function exportPdfReport(params: {
     nozzles: fpNozzles,
   };
 
+  const adminCfg = getAdminConfig();
+  const activeBrand = cleanText(adminCfg.brandName, 50) || 'Reben Station Shift';
+  const currency = cleanText(adminCfg.currencyCode, 8) || 'SAR';
+  const customPdfFooter = cleanText(adminCfg.pdfFooterNote, 90);
+  const sheetApiUrl = resolveSheetUrl(adminCfg.sheetUrlOrId);
   const checkCode = reportFingerprint(reportData);
   const reportId = buildReportId(reportData.station, reportData.reportDate, shiftCode, checkCode);
   const reportToken = makeReportToken();
-  const verifyUrl = reportApiReady() ? `${REPORT_API_URL}?t=${reportToken}` : '';
+  const verifyUrl = reportApiReady() ? `${sheetApiUrl}?t=${reportToken}` : '';
   const qrText = `HTTPS://${checkCode}.R`;
   const qrSize = 15;
   const qrX = pageWidth - margin - qrSize;
   const qrY = 13.5;
 
   let qrObj: QrInstance | null = null;
-  try {
-    qrObj = qrcode(0, 'M') as unknown as QrInstance;
-    qrObj.addData(qrText, 'Alphanumeric');
-    qrObj.make();
-  } catch {
-    qrObj = null;
+  if (adminCfg.pdfShowQr) {
+    try {
+      qrObj = qrcode(0, 'M') as unknown as QrInstance;
+      qrObj.addData(qrText, 'Alphanumeric');
+      qrObj.make();
+    } catch {
+      qrObj = null;
+    }
   }
 
   doc.setProperties({
     title: `${station} - Shift Audit Report - ${reportDateStr}`,
     subject: `Official Station Shift Audit Record - ${reportId}`,
-    author: 'Reben Petroleum',
-    creator: 'Reben Station Reports',
+    author: activeBrand,
+    creator: activeBrand,
   });
 
   function drawSectionHeader(title: string, yPos: number) {
@@ -724,9 +797,9 @@ export async function exportPdfReport(params: {
   const cardW = (contentWidth - cardGap * 2) / 3;
   const cardH = 15.5;
   const kpis = [
-    { label: 'Total Amount', value: `${fmt2(payments.total)} SAR` },
+    { label: 'Total Amount', value: `${fmt2(payments.total)} ${currency}` },
     { label: 'Total Sale', value: `${fmt2(totalLiters)} L` },
-    { label: 'Total Cash', value: `${fmt2(payments.cash)} SAR` },
+    { label: 'Total Cash', value: `${fmt2(payments.cash)} ${currency}` },
   ];
 
   kpis.forEach((kpi, idx) => {
@@ -759,7 +832,7 @@ export async function exportPdfReport(params: {
   gradeCol = 0;
   autoTable(doc, {
     ...(baseTable as Record<string, unknown>),
-    head: [['Fuel Type', 'Price', 'Sale (L)', 'Total Amount (SR)']],
+    head: [['Fuel Type', 'Price', 'Sale (L)', `Total Amount (${currency})`]],
     body: fuelBody,
     foot: [['TOTAL SALES', '--', fmt2(totalLiters), fmt2(payments.total)]],
     startY: currentY + 2.5,
@@ -771,86 +844,89 @@ export async function exportPdfReport(params: {
     },
   });
 
-  currentY = (doc.lastAutoTable?.finalY ?? currentY) + 7;
-  drawSectionHeader('PAYMENT', currentY);
+  currentY = doc.lastAutoTable?.finalY ?? currentY;
 
-  const activeDigital: [string, string][] = [];
-  if (payments.r > 0) activeDigital.push(['ATM / POS', fmt2(payments.r)]);
-  if (payments.p > 0) activeDigital.push(['Reben APP', fmt2(payments.p)]);
-  if (payments.s > 0) activeDigital.push(['Petro APP', fmt2(payments.s)]);
-  if (payments.k > 0) activeDigital.push(['Sayyarah APP', fmt2(payments.k)]);
-  if (payments.v > 0) activeDigital.push(['Kafart Plus', fmt2(payments.v)]);
-  if (payments.c > 0) activeDigital.push(['V-Wallet', fmt2(payments.c)]);
-  if (payments.o > 0) activeDigital.push(['Other Digital', fmt2(payments.o)]);
+  if (adminCfg.pdfShowPayments) {
+    currentY += 7;
+    drawSectionHeader('PAYMENT', currentY);
 
-  const pairedPayRows: string[][] = [];
-  for (let i = 0; i < activeDigital.length; i += 2) {
-    const left = activeDigital[i];
-    const right = activeDigital[i + 1] || ['', ''];
-    pairedPayRows.push([left[0], left[1], right[0], right[1]]);
+    const activeDigital: [string, string][] = getDigitalPaymentRows(payments).map((row) => [
+      row.label,
+      fmt2(row.amount),
+    ]);
+
+    const pairedPayRows: string[][] = [];
+    for (let i = 0; i < activeDigital.length; i += 2) {
+      const left = activeDigital[i];
+      const right = activeDigital[i + 1] || ['', ''];
+      pairedPayRows.push([left[0], left[1], right[0], right[1]]);
+    }
+    if (pairedPayRows.length === 0) {
+      pairedPayRows.push(['No Digital / App Payments', '0.00', '', '']);
+    }
+
+    colAligns = ['left', 'right', 'left', 'right'];
+    gradeCol = -1;
+    autoTable(doc, {
+      ...(baseTable as Record<string, unknown>),
+      head: [['Type', `Amount (${currency})`, 'Type', `Amount (${currency})`]],
+      body: pairedPayRows,
+      foot: [['Total Digital / Apps', fmt2(payments.appsTotal), 'NET CASH IN HAND', fmt2(payments.cash)]],
+      startY: currentY + 2.5,
+      columnStyles: {
+        0: { cellWidth: 50 },
+        1: { cellWidth: 36, halign: 'right' },
+        2: { cellWidth: 50 },
+        3: { cellWidth: 38, halign: 'right' },
+      },
+      didParseCell: (data: any) => {
+        alignHeadFoot(data);
+        if (data.section === 'foot' && data.column.index === 3) {
+          data.cell.styles.textColor = C_NET;
+        }
+      },
+    });
+    currentY = doc.lastAutoTable?.finalY ?? currentY;
   }
-  if (pairedPayRows.length === 0) {
-    pairedPayRows.push(['No Digital / App Payments', '0.00', '', '']);
+
+  if (adminCfg.pdfShowNozzles) {
+    currentY += 7;
+    drawSectionHeader('NOZZLE READINGS', currentY);
+
+    const priceMap: Record<FuelType, number> = {
+      '91': fpPrices.p91,
+      '95': fpPrices.p95,
+      '98': fpPrices.p98,
+      D: fpPrices.pd,
+      K: fpPrices.pk,
+    };
+    const nozzleRows = nozzles.map((n) => {
+      const initVal = parseFloat(n.init) || 0;
+      const finalVal = parseFloat(n.final) || 0;
+      const liters = Math.max(0, finalVal - initVal);
+      const rowAmt = liters * (priceMap[n.type] || 0);
+      return [n.name, n.type, fmt2(initVal), fmt2(finalVal), fmt2(liters), fmt2(rowAmt)];
+    });
+
+    colAligns = ['left', 'left', 'right', 'right', 'right', 'right'];
+    gradeCol = 1;
+    autoTable(doc, {
+      ...(baseTable as Record<string, unknown>),
+      head: [['Nozzle', 'Type', 'Start', 'End', 'Sale (L)', `Amount (${currency})`]],
+      body: nozzleRows,
+      startY: currentY + 2.5,
+      margin: { left: margin, right: margin, top: 18, bottom: 32 },
+      alternateRowStyles: { fillColor: [250, 250, 249] },
+      columnStyles: {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 32, halign: 'right' },
+        3: { cellWidth: 36, halign: 'right' },
+        4: { cellWidth: 33, halign: 'right' },
+        5: { cellWidth: 29, halign: 'right' },
+      },
+    });
   }
-
-  colAligns = ['left', 'right', 'left', 'right'];
-  gradeCol = -1;
-  autoTable(doc, {
-    ...(baseTable as Record<string, unknown>),
-    head: [['Type', 'Amount (SR)', 'Type', 'Amount (SR)']],
-    body: pairedPayRows,
-    foot: [['Total Digital / Apps', fmt2(payments.appsTotal), 'NET CASH IN HAND', fmt2(payments.cash)]],
-    startY: currentY + 2.5,
-    columnStyles: {
-      0: { cellWidth: 50 },
-      1: { cellWidth: 36, halign: 'right' },
-      2: { cellWidth: 50 },
-      3: { cellWidth: 38, halign: 'right' },
-    },
-    didParseCell: (data: any) => {
-      alignHeadFoot(data);
-      if (data.section === 'foot' && data.column.index === 3) {
-        data.cell.styles.textColor = C_NET;
-      }
-    },
-  });
-
-  currentY = (doc.lastAutoTable?.finalY ?? currentY) + 7;
-  drawSectionHeader('NOZZLE READINGS', currentY);
-
-  const priceMap: Record<FuelType, number> = {
-    '91': fpPrices.p91,
-    '95': fpPrices.p95,
-    '98': fpPrices.p98,
-    D: fpPrices.pd,
-    K: fpPrices.pk,
-  };
-  const nozzleRows = nozzles.map((n) => {
-    const initVal = parseFloat(n.init) || 0;
-    const finalVal = parseFloat(n.final) || 0;
-    const liters = Math.max(0, finalVal - initVal);
-    const rowAmt = liters * (priceMap[n.type] || 0);
-    return [n.name, n.type, fmt2(initVal), fmt2(finalVal), fmt2(liters), fmt2(rowAmt)];
-  });
-
-  colAligns = ['left', 'left', 'right', 'right', 'right', 'right'];
-  gradeCol = 1;
-  autoTable(doc, {
-    ...(baseTable as Record<string, unknown>),
-    head: [['Nozzle', 'Type', 'Start', 'End', 'Sale (L)', 'Amount (SR)']],
-    body: nozzleRows,
-    startY: currentY + 2.5,
-    margin: { left: margin, right: margin, top: 18, bottom: 32 },
-    alternateRowStyles: { fillColor: [250, 250, 249] },
-    columnStyles: {
-      0: { cellWidth: 22 },
-      1: { cellWidth: 22 },
-      2: { cellWidth: 32, halign: 'right' },
-      3: { cellWidth: 36, halign: 'right' },
-      4: { cellWidth: 33, halign: 'right' },
-      5: { cellWidth: 29, halign: 'right' },
-    },
-  });
 
   let afterY = (doc.lastAutoTable?.finalY ?? currentY) + 3.8;
   if (afterY > pageHeight - 46) {
@@ -874,29 +950,31 @@ export async function exportPdfReport(params: {
     afterY += 8;
   }
 
-  const sigGap = 10;
-  const sigLineW = (contentWidth - sigGap) / 2;
-  const sigY = afterY + 8.3;
+  if (adminCfg.pdfShowSignatures) {
+    const sigGap = 10;
+    const sigLineW = (contentWidth - sigGap) / 2;
+    const sigY = afterY + 8.3;
 
-  doc.setDrawColor(...C_DASH);
-  doc.setLineWidth(0.3);
-  doc.setLineDashPattern([1.1, 1.1], 0);
-  doc.line(margin, sigY, margin + sigLineW, sigY);
-  const rightSigX = margin + sigLineW + sigGap;
-  doc.line(rightSigX, sigY, rightSigX + sigLineW, sigY);
-  doc.setLineDashPattern([], 0);
+    doc.setDrawColor(...C_DASH);
+    doc.setLineWidth(0.3);
+    doc.setLineDashPattern([1.1, 1.1], 0);
+    doc.line(margin, sigY, margin + sigLineW, sigY);
+    const rightSigX = margin + sigLineW + sigGap;
+    doc.line(rightSigX, sigY, rightSigX + sigLineW, sigY);
+    doc.setLineDashPattern([], 0);
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.6);
-  doc.setTextColor(...C_SLATE);
-  doc.text('Shift Attendant / Cashier', margin, sigY + 4);
-  doc.text('Station Supervisor / Manager', rightSigX, sigY + 4);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.6);
+    doc.setTextColor(...C_SLATE);
+    doc.text('Shift Attendant / Cashier', margin, sigY + 4);
+    doc.text('Station Supervisor / Manager', rightSigX, sigY + 4);
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(...C_MUTED);
-  doc.text('Name  /  Signature  /  Date', margin, sigY + 8.2);
-  doc.text('Name  /  Signature  /  Date', rightSigX, sigY + 8.2);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...C_MUTED);
+    doc.text('Name  /  Signature  /  Date', margin, sigY + 8.2);
+    doc.text('Name  /  Signature  /  Date', rightSigX, sigY + 8.2);
+  }
 
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
@@ -921,7 +999,13 @@ export async function exportPdfReport(params: {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.8);
     doc.setTextColor(...C_MUTED);
-    doc.text('Thank you for being part of Reben!  •  Official Station Shift Audit Record', margin, pageHeight - 14);
+    const wmText = getLicenseWatermarkText();
+    doc.text(
+      (customPdfFooter || `${activeBrand}  •  Official Station Shift Audit Record`) +
+        (wmText ? `   •   ${wmText}` : ''),
+      margin,
+      pageHeight - 14
+    );
     doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 14, { align: 'right' });
 
     doc.setFont('helvetica', 'bold');
@@ -931,7 +1015,7 @@ export async function exportPdfReport(params: {
     const idLabelW = doc.getTextWidth(idLabel);
     doc.setFont('helvetica', 'normal');
     doc.text(
-      reportId + '   •   Checksum: ' + checkCode + (qrObj ? '   •   Designed By- Mozahid' : ''),
+      reportId + '   •   Checksum: ' + checkCode + (adminCfg.pdfShowCredit ? '   •   Designed By- Mozahid' : ''),
       margin + idLabelW,
       pageHeight - 9.8
     );
